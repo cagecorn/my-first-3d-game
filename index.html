@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>내 첫 3D 게임</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/enable3d@0.25.4/dist/enable3d.phaserExtension.min.js"></script>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <script>
+        // 2. 여기서부터 게임 설정을 시작합니다.
+        const { Enable3d, Scene3d } = window.enable3d;
+
+        class MainScene extends Scene3d {
+            constructor() {
+                super({ key: 'MainScene' });
+            }
+
+            init() {
+                this.accessThirdDimension(); // 3D 모드 켜기
+            }
+
+            create() {
+                // 3D 공간 설정 (바닥, 하늘 등)
+                this.third.warpSpeed(); 
+
+                // 간단한 상자 하나 만들기
+                this.third.add.box({ x: 0, y: 2, z: 0, color: 'red' });
+                
+                // 물리 효과가 적용된 상자 (떨어짐)
+                this.third.physics.add.box({ x: 0, y: 10, z: 0, color: 'blue' });
+            }
+        }
+
+        const config = {
+            type: Phaser.WEBGL,
+            transparent: true,
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH,
+                width: 800,
+                height: 600
+            },
+            scene: [MainScene],
+            ...Canvas() // Enable3d의 캔버스 설정 적용
+        };
+
+        // 3. 물리 엔진을 로드하고 게임 시작
+        PhysicsLoader('/lib/ammo/kripken', () => new Phaser.Game(config));
+    </script>
+</body>
+</html>
