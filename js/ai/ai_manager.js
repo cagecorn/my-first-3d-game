@@ -117,9 +117,22 @@ Prompt: ${prompt}
     _buildContext(partyMembers, pageEvent) {
         // Create status summary
         let statusSummary = "현재 파티 상태:\n";
+        let memoryTags = "";
+
         partyMembers.forEach((m, index) => {
             if (index === 0) return; // Skip player (first member)
             statusSummary += `- ${m.name} (${m.jobClass}): HP ${m.hp}/${m.maxHp} (${m.isAlive() ? '생존' : '기절'})\n`;
+
+            // Collect Memory Tags
+            if (m.memory_tags) {
+                const traits = m.memory_tags.traits.join(", ");
+                const titles = m.memory_tags.titles.join(", ");
+                const relationships = m.memory_tags.relationships.join(", ");
+
+                if (traits || titles || relationships) {
+                    memoryTags += `- ${m.name} 특성: [${traits}] | 칭호: [${titles}] | 관계: [${relationships}]\n`;
+                }
+            }
         });
 
         // Event Description
@@ -136,6 +149,9 @@ ${GAME_RULES}
 
 [캐릭터 페르소나]
 ${JSON.stringify(PERSONAS, null, 2)}
+
+[캐릭터 기억 및 특성 (이 정보를 바탕으로 롤플레이 스타일을 조정하세요)]
+${memoryTags || "없음"}
 
 ${statusSummary}
 
