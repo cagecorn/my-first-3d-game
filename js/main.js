@@ -1,12 +1,24 @@
 import { UIManager } from './ui_manager.js';
 import { BattleScene } from './game_scene.js';
-// Import other logic as needed (Party, Item, etc.) - keeping it simple for now
+import { Book } from './book.js';
+import { Party } from './party.js';
+import { Character } from './character.js';
+import { AIManager } from './ai/ai_manager.js';
+import { MBTI_PRESETS } from './data/mbti_presets.js';
 
 class GameApp {
     constructor() {
         this.ui = new UIManager();
         this.phaserGame = null;
         this.apiKey = localStorage.getItem('google_api_key');
+
+        // Game Logic
+        this.aiManager = new AIManager();
+        this.book = new Book(this.aiManager);
+        this.party = new Party();
+
+        // State
+        this.currentPage = null;
 
         this.init();
     }
@@ -16,6 +28,10 @@ class GameApp {
         this.ui.onStartGame = (key) => this.handleStartGame(key);
         this.ui.onTurnPage = () => this.handleTurnPage();
         this.ui.onInventory = () => this.handleInventory();
+
+        // Feedback Callbacks
+        this.ui.onApprove = (charName) => this.handleFeedback(charName, 2);
+        this.ui.onDisapprove = (charName) => this.handleFeedback(charName, -2);
 
         // Check for existing API Key
         if (this.apiKey) {
@@ -30,9 +46,36 @@ class GameApp {
     handleStartGame(key) {
         this.apiKey = key;
         localStorage.setItem('google_api_key', key);
+        this.aiManager.setApiKey(key);
         this.ui.hideSetup();
+
+        this.initializeParty();
         this.ui.log("Key accepted. The Grimoire opens...");
         this.startPhaser();
+
+        // Generate first page
+        this.handleTurnPage();
+    }
+
+    initializeParty() {
+        // Create Player
+        const player = new Character("Player", "Adventurer");
+        // Player stats could be custom, but let's leave default for now
+        this.party.addMember(player);
+
+        // Add AI Companions (One of each Role for balance, or random)
+        // Let's pick 3 random MBTI presets
+        const presets = Object.values(MBTI_PRESETS);
+        for(let i=0; i<3; i++) {
+            const p = presets[Math.floor(Math.random() * presets.length)];
+            const char = new Character(p.name, p.baseClass);
+            char.setMBTI(p.stats); // Use the stats from preset
+            // Add initial traits
+            p.traits.forEach(t => char.addTag('traits', t));
+
+            this.party.addMember(char);
+            this.ui.log(`Joined party: ${char.name} (${char.jobClass}) - ${char.mbti_type}`);
+        }
     }
 
     startPhaser() {
@@ -56,17 +99,233 @@ class GameApp {
             this.ui.log(text, type);
         });
 
+        // Wait for scene to be ready before sending data?
+        // We can use scene.start data passing
+
         this.ui.log("Visual engine initialized.");
     }
 
-    handleTurnPage() {
+    async handleTurnPage() {
         this.ui.log("You turn the page...", 'normal');
-        // Logic to generate new encounter, update Phaser scene, etc.
-        // For now, trigger a dummy effect in Phaser if needed, or just log.
+
+        // 1. Generate Page
+        try {
+            this.currentPage = await this.book.generateNextPage();
+
+            // 2. Log Story
+            this.ui.log(`<h3>${this.currentPage.title}</h3>`, 'normal');
+            this.ui.log(this.currentPage.description, 'normal');
+
+            // 3. Render Choices / Start Voting Logic
+            if (this.currentPage.choices && this.currentPage.choices.length > 0) {
+                 this.renderVotingUI();
+            } else {
+                // No choices? Maybe automatic next page or just text
+            }
+
+        } catch (e) {
+            console.error(e);
+            this.ui.log("The pages are stuck together... (Error generating page)");
+        }
+    }
+
+    renderVotingUI() {
+        const choicesDiv = document.createElement('div');
+        choicesDiv.className = "mt-4 border-t pt-2";
+
+        const title = document.createElement('p');
+        title.className = "font-bold text-gray-700 mb-2";
+        title.innerText = "Vote for Action:";
+        choicesDiv.appendChild(title);
+
+        this.currentPage.choices.forEach((choice, index) => {
+            const btn = document.createElement('button');
+            btn.className = "block w-full text-left px-3 py-2 mb-2 bg-white border rounded shadow-sm hover:bg-blue-50";
+            btn.innerText = `${index + 1}. ${choice.text}`;
+            btn.onclick = () => this.handlePlayerVote(index);
+            choicesDiv.appendChild(btn);
+        });
+
+        this.ui.logElement.appendChild(choicesDiv);
+        this.ui.scrollToBottom();
+    }
+
+    handlePlayerVote(playerChoiceIndex) {
+        // 1. Calculate AI Votes
+        const votes = [0, 0]; // Assuming max 2 choices for now?
+        // Actually choices length is dynamic.
+        const voteCounts = new Array(this.currentPage.choices.length).fill(0);
+        const voteDetails = [];
+
+        // Player Vote
+        voteCounts[playerChoiceIndex]++;
+        voteDetails.push(`Player voted for: "${this.currentPage.choices[playerChoiceIndex].text}"`);
+
+        // AI Votes
+        this.party.members.forEach((member, index) => {
+            if (index === 0) return; // Skip Player
+
+            // Find best choice
+            let bestScore = -9999;
+            let bestChoiceIndex = -1;
+
+            this.currentPage.choices.forEach((c, cIndex) => {
+                const score = member.evaluateChoice(c, this.party);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestChoiceIndex = cIndex;
+                }
+            });
+
+            if (bestChoiceIndex !== -1) {
+                voteCounts[bestChoiceIndex]++;
+                voteDetails.push(`${member.name} (${member.mbti_type}) voted for: "${this.currentPage.choices[bestChoiceIndex].text}"`);
+            }
+        });
+
+        // 2. Display Results
+        this.ui.log("<b>Voting Results:</b>");
+        voteDetails.forEach(v => this.ui.log(v));
+
+        // Determine Winner
+        let maxVotes = -1;
+        let winnerIndex = -1;
+        for(let i=0; i<voteCounts.length; i++) {
+            if (voteCounts[i] > maxVotes) {
+                maxVotes = voteCounts[i];
+                winnerIndex = i;
+            }
+        }
+
+        // Check for Tie (Simple: first one wins or random? Or Player wins ties?)
+        // Let's say Player wins ties for now to be generous.
+        if (voteCounts[playerChoiceIndex] === maxVotes) {
+            winnerIndex = playerChoiceIndex;
+        }
+
+        const winningChoice = this.currentPage.choices[winnerIndex];
+
+        // 3. Check for Persuasion Opportunity
+        if (winnerIndex !== playerChoiceIndex) {
+            this.ui.log(`The party wants to <b>${winningChoice.text}</b>.`, 'normal');
+            this.offerPersuasion(playerChoiceIndex, winnerIndex);
+        } else {
+            this.ui.log(`The party agrees to <b>${winningChoice.text}</b>.`);
+            this.executeChoice(winningChoice);
+        }
+    }
+
+    offerPersuasion(playerIndex, winnerIndex) {
+        const div = document.createElement('div');
+        div.className = "mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded";
+
+        const p = document.createElement('p');
+        p.innerText = "You disagree with the majority. Attempt to persuade them?";
+        p.className = "mb-2 text-sm font-bold text-yellow-800";
+        div.appendChild(p);
+
+        const btnYes = document.createElement('button');
+        btnYes.className = "px-3 py-1 bg-yellow-500 text-white rounded mr-2";
+        btnYes.innerText = "Persuade (Roll D20 + Cha)";
+        btnYes.onclick = () => {
+            div.remove();
+            this.handlePersuasion(playerIndex, winnerIndex);
+        };
+
+        const btnNo = document.createElement('button');
+        btnNo.className = "px-3 py-1 bg-gray-300 rounded";
+        btnNo.innerText = "Go with majority";
+        btnNo.onclick = () => {
+            div.remove();
+            this.executeChoice(this.currentPage.choices[winnerIndex]);
+        };
+
+        div.appendChild(btnYes);
+        div.appendChild(btnNo);
+        this.ui.logElement.appendChild(div);
+        this.ui.scrollToBottom();
+    }
+
+    handlePersuasion(playerIndex, winnerIndex) {
+        // Roll D20
+        const d20 = Math.floor(Math.random() * 20) + 1;
+        // Mock Charisma Mod (e.g., +2)
+        const chaMod = 2;
+        const total = d20 + chaMod;
+        const DC = 12; // Difficulty
+
+        this.ui.log(`Persuasion Check: D20(${d20}) + ${chaMod} = ${total} (DC ${DC})`);
+
+        if (total >= DC) {
+            this.ui.log("<b>Success!</b> You convinced the party.");
+            this.executeChoice(this.currentPage.choices[playerIndex]);
+        } else {
+            this.ui.log("<b>Failure.</b> The party ignores your pleas.");
+            this.executeChoice(this.currentPage.choices[winnerIndex]);
+        }
+    }
+
+    executeChoice(choice) {
+        this.ui.log(`> Executing: ${choice.text}`);
+
+        if (choice.action === 'nextPage') {
+            this.handleTurnPage();
+        } else if (choice.action === 'startCombat') {
+            this.ui.log("Combat Started! (Placeholder)");
+            // Here we would interact with Phaser BattleScene
+            // For now, let's just simulate end of combat and next page
+            setTimeout(() => {
+                this.ui.log("Victory!");
+                this.handleTurnPage();
+            }, 2000);
+        } else if (choice.action === 'rest') {
+            this.party.members.forEach(m => m.heal(20));
+            this.ui.log("Party rested and recovered HP.");
+            this.handleTurnPage();
+        } else {
+             // Default fallthrough
+             this.handleTurnPage();
+        }
     }
 
     handleInventory() {
         this.ui.log("Inventory is empty (Work in Progress).");
+    }
+
+    handleFeedback(charName, value) {
+        const member = this.party.members.find(m => m.name === charName);
+        if (member) {
+            // Reinforce current dominant trait or just boost E/S/T/J arbitrarily?
+            // The prompt says: "Identifies the dominant MBTI trait of that action... and Increases that stat value"
+            // Since we don't know exactly *which* trait caused the AI to say that (without complex tracing),
+            // we can simplify:
+            // If Approved, strengthen the strongest deviation.
+            // If Disapproved, weaken it.
+
+            // Find strongest deviation
+            const stats = ['E', 'S', 'T', 'J'];
+            let maxVal = 0;
+            let dominantStat = 'E';
+
+            stats.forEach(s => {
+                if (Math.abs(member.mbti[s]) > Math.abs(maxVal)) {
+                    maxVal = member.mbti[s];
+                    dominantStat = s;
+                }
+            });
+
+            // Apply change
+            // If Approve (+2): Increase magnitude of dominant trait (Make them MORE of what they are)
+            // If Disapprove (-2): Decrease magnitude (Make them LESS of what they are)
+            // Wait, if maxVal is negative (e.g. Introverted -80), increasing magnitude means going to -82.
+            // So we add (sign * value).
+
+            const sign = Math.sign(maxVal) || 1;
+            const change = value * sign; // If value is +2, change is +2 * sign. If -80, becomes -82. Correct.
+
+            member.adjustMBTI(dominantStat, change);
+            this.ui.log(`${member.name}'s personality shifted. (${dominantStat} ${change > 0 ? 'reinforced' : 'weakened'})`, 'normal');
+        }
     }
 }
 
