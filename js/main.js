@@ -5,6 +5,7 @@ import { Party } from './party.js';
 import { Character } from './character.js';
 import { AIManager } from './ai/ai_manager.js';
 import { MBTI_PRESETS } from './data/mbti_presets.js';
+import { ItemFactory } from './item.js';
 
 class GameApp {
     constructor() {
@@ -276,11 +277,15 @@ class GameApp {
             // For now, let's just simulate end of combat and next page
             setTimeout(() => {
                 this.ui.log("Victory!");
+                this.awardLoot(); // Award loot on victory
                 this.handleTurnPage();
             }, 2000);
         } else if (choice.action === 'rest') {
             this.party.members.forEach(m => m.heal(20));
             this.ui.log("Party rested and recovered HP.");
+            this.handleTurnPage();
+        } else if (choice.action === 'openChest') {
+            this.awardLoot();
             this.handleTurnPage();
         } else {
              // Default fallthrough
@@ -288,8 +293,22 @@ class GameApp {
         }
     }
 
+    awardLoot() {
+        const item = ItemFactory.createLootFromPage(this.currentPage);
+        this.party.addItem(item);
+        this.ui.log(`<b>Loot:</b> You found a <span class="text-yellow-400">${item.name}</span>!`, 'normal');
+        this.ui.log(`<i>${item.description}</i>`, 'normal');
+    }
+
     handleInventory() {
-        this.ui.log("Inventory is empty (Work in Progress).");
+        this.ui.log("Inventory:");
+        if (this.party.inventory.length === 0) {
+            this.ui.log(" - (Empty)");
+        } else {
+            this.party.inventory.forEach(item => {
+                this.ui.log(` - ${item.name} (${item.value})`);
+            });
+        }
     }
 
     handleFeedback(charName, value) {

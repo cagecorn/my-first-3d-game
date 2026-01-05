@@ -40,4 +40,86 @@ export class ItemFactory {
     static createPotion() {
          return new Item("Health Potion", ItemType.POTION, 30, "체력을 30 회복합니다.");
     }
+
+    /**
+     * Semantic Materialization Loot System
+     * @param {Object} page - The current Page object containing modifiers (prefix, base, suffix)
+     * @returns {Item|Array} Generated item(s)
+     */
+    static createLootFromPage(page) {
+        // Fallback if no modifiers
+        if (!page.modifiers) return this.createRandomItem();
+
+        const { prefix, base, suffix } = page.modifiers;
+
+        let itemNameParts = [];
+        let itemType = ItemType.MISC;
+        let itemValue = 0;
+        let itemDesc = "An item materialized from the words of this page.";
+
+        // 1. Base Mapping (Theme/Tier) -> Determines Item Type & Base Value
+        // Simple mapping based on Base Name or ID
+        if (base) {
+            if (base.keywords.includes('bandits') || base.keywords.includes('goblins')) {
+                // Tier 1 Weapons
+                itemType = ItemType.WEAPON;
+                itemValue = 5;
+                itemNameParts.push(base.name.split(' ')[0]); // "Bandit", "Goblin"
+                itemNameParts.push("Dagger");
+            } else if (base.keywords.includes('magic') || base.keywords.includes('runes')) {
+                // Magic Items
+                itemType = ItemType.WEAPON; // or Staff
+                itemValue = 8;
+                itemNameParts.push("Ancient");
+                itemNameParts.push("Staff");
+            } else if (base.keywords.includes('cave') || base.keywords.includes('ruins')) {
+                // Armor
+                itemType = ItemType.ARMOR;
+                itemValue = 4;
+                itemNameParts.push("Explorer's");
+                itemNameParts.push("Tunic");
+            } else {
+                 itemType = ItemType.MISC;
+                 itemValue = 10;
+                 itemNameParts.push("Souvenir");
+            }
+        }
+
+        // 2. Prefix Mapping (Enchantment)
+        if (prefix) {
+            itemNameParts.unshift(prefix.name); // "Burning Bandit Dagger"
+            if (prefix.effect_type === 'dot_fire') {
+                itemValue += 3;
+                itemDesc += " It is warm to the touch.";
+            } else if (prefix.effect_type === 'stat_boost_hp') {
+                itemValue += 2; // Maybe defensive value?
+                itemDesc += " It feels incredibly heavy.";
+            } else if (prefix.effect_type === 'stat_boost_atk') {
+                itemValue += 5;
+                itemDesc += " It vibrates with power.";
+            }
+        }
+
+        // 3. Suffix Mapping (Reward Type / Extra)
+        // Suffix usually spawns EXTRA items or currencies, handled outside or here?
+        // Let's modify the item itself if relevant, or return multiple items.
+        // For simplicity, we just modify the item here or return a special "Reward Box"
+
+        // If Suffix is "of Midas", maybe the item is Golden and worth more money?
+        if (suffix) {
+            if (suffix.id === 'of_midas') {
+                itemNameParts.push(suffix.name);
+                itemValue *= 2; // Higher value
+                itemDesc += " It is made of pure gold.";
+            } else if (suffix.id === 'of_blood') {
+                itemNameParts.push(suffix.name);
+                itemValue += 2;
+                itemDesc += " It pulses with a red aura.";
+            }
+        }
+
+        const finalName = itemNameParts.join(" ");
+
+        return new Item(finalName, itemType, itemValue, itemDesc);
+    }
 }
