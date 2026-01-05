@@ -27,4 +27,18 @@ export class Party {
     isWipedOut() {
         return this.getAliveMembers().length === 0;
     }
+
+    addItem(item) {
+        this.inventory.push(item);
+        // Maybe sort inventory?
+    }
+
+    removeItem(item) {
+        const index = this.inventory.indexOf(item);
+        if (index > -1) {
+            this.inventory.splice(index, 1);
+            return true;
+        }
+        return false;
+    }
 }

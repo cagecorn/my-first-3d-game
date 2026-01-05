@@ -47,7 +47,9 @@
 
             <!-- Layer 2: UI Overlay (HUD, Floating Text - optional for now) -->
             <div id="layer-ui" class="ui-layer" style="pointer-events: none;">
-                <!-- Things that float above the book but below modals -->
+                <div style="pointer-events: auto; position: absolute; bottom: 20px; right: 20px;">
+                    <button id="btn-inventory" class="action-btn">🎒 인벤토리</button>
+                </div>
             </div>
 
             <!-- Layer 3: Modal / Popups -->

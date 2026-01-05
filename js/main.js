@@ -3,6 +3,7 @@ import { Party } from './party.js';
 import { Book, EventType } from './book.js';
 import { CombatManager } from './combat.js';
 import { UIEngine } from './ui.js';
+import { ItemFactory } from './item.js';
 
 // Game State
 const gameState = {
@@ -19,6 +20,38 @@ const ui = new UIEngine();
 // Initialize Game
 function initGame() {
     ui.initialize();
+
+    // Wire up inventory
+    ui.onInventoryClick = () => {
+        ui.renderInventory(gameState.party, (itemIndex, charIndex) => {
+            const item = gameState.party.inventory[itemIndex];
+            const char = gameState.party.getAliveMembers()[charIndex];
+
+            if (item && char) {
+                if (item.type === 'potion') {
+                     // Use potion
+                     const healAmount = item.value;
+                     char.heal(healAmount);
+                     gameState.party.removeItem(item);
+                     ui.log(`>> ${char.name}에게 ${item.name}을(를) 사용했습니다. 체력 ${healAmount} 회복.`);
+                } else {
+                    // Equip
+                    const oldItem = char.equipItem(item);
+                    gameState.party.removeItem(item);
+                    if (oldItem) {
+                        gameState.party.addItem(oldItem);
+                        ui.log(`>> ${char.name}: ${oldItem.name} 해제, ${item.name} 장착.`);
+                    } else {
+                        ui.log(`>> ${char.name}: ${item.name} 장착.`);
+                    }
+                }
+
+                ui.updateParty(gameState.party.members);
+                ui.hideModal(); // Close after action
+            }
+        });
+    };
+
     ui.log("게임을 초기화합니다...");
 
     gameState.party = new Party();
@@ -93,8 +126,13 @@ function handleAction(actionKey) {
             startCombat();
             break;
         case "openChest":
-            ui.log(">> 상자를 열었습니다! 100 골드를 획득했습니다.");
-            gameState.party.gold += 100;
+            const goldAmount = 100;
+            const newItem = ItemFactory.createRandomItem();
+
+            gameState.party.gold += goldAmount;
+            gameState.party.addItem(newItem);
+
+            ui.log(`>> 상자를 열었습니다! ${goldAmount} 골드와 [${newItem.name}]을(를) 획득했습니다.`);
             turnPage();
             break;
         case "rest":
@@ -126,6 +164,12 @@ function startCombat() {
             gameState.isProcessing = false;
             gameState.combatManager = null;
             if (isWin) {
+                // Drop Item chance
+                if (Math.random() < 0.5) {
+                    const dropItem = ItemFactory.createRandomItem();
+                    gameState.party.addItem(dropItem);
+                    ui.log(`>> 승리 보상으로 [${dropItem.name}]을(를) 획득했습니다!`);
+                }
                 turnPage();
             } else {
                 alert("Game Over");

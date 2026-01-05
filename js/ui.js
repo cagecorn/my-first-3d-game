@@ -30,6 +30,14 @@ export class UIEngine {
             modalCloseBtn.onclick = () => this.hideModal();
         }
 
+        // Inventory Button
+        const invBtn = document.getElementById('btn-inventory');
+        if (invBtn) {
+            invBtn.onclick = () => {
+                if (this.onInventoryClick) this.onInventoryClick();
+            }
+        }
+
         console.log("UI Engine Initialized");
     }
 
@@ -142,5 +150,62 @@ export class UIEngine {
         if (this.layers.modal) {
             this.layers.modal.style.display = 'none';
         }
+    }
+
+    renderInventory(party, onEquip) {
+        let html = `<h3>🎒 인벤토리</h3>`;
+
+        if (party.inventory.length === 0) {
+            html += `<p>인벤토리가 비어있습니다.</p>`;
+        } else {
+            html += `<ul style="list-style: none; padding: 0;">`;
+            party.inventory.forEach((item, index) => {
+                html += `
+                    <li style="border:1px solid #555; margin: 5px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${item.name}</strong> <small>(${item.type})</small>
+                            <br><span style="font-size: 0.8em;">${item.description}</span>
+                        </div>
+                        <div>
+                           ${this._renderEquipButtons(item, party, index)}
+                        </div>
+                    </li>`;
+            });
+            html += `</ul>`;
+        }
+
+        this.showModal(html);
+
+        // Bind events
+        setTimeout(() => {
+            const buttons = this.elements.modalContent.querySelectorAll('.equip-btn');
+            buttons.forEach(btn => {
+                btn.onclick = (e) => {
+                    const itemIndex = e.target.getAttribute('data-index');
+                    const charIndex = e.target.getAttribute('data-char');
+                    onEquip(itemIndex, charIndex);
+                };
+            });
+        }, 0);
+    }
+
+    _renderEquipButtons(item, party, itemIndex) {
+        // Dropdown or list of buttons for each character
+        let html = '';
+        if (item.type === 'weapon' || item.type === 'armor') {
+            party.getAliveMembers().forEach((char, charIndex) => {
+                html += `<button class="equip-btn" data-index="${itemIndex}" data-char="${charIndex}" style="margin-left: 5px; cursor:pointer;">
+                    To ${char.name}
+                </button>`;
+            });
+        } else if (item.type === 'potion') {
+            // Use logic
+             party.getAliveMembers().forEach((char, charIndex) => {
+                html += `<button class="equip-btn" data-index="${itemIndex}" data-char="${charIndex}" style="margin-left: 5px; cursor:pointer;">
+                    Use on ${char.name}
+                </button>`;
+            });
+        }
+        return html;
     }
 }
