@@ -4,6 +4,7 @@ import { Book, EventType } from './book.js';
 import { CombatManager } from './combat.js';
 import { UIEngine } from './ui.js';
 import { ItemFactory } from './item.js';
+import { AIManager } from './ai/ai_manager.js';
 
 // Game State
 const gameState = {
@@ -11,7 +12,8 @@ const gameState = {
     book: null,
     currentPage: null,
     combatManager: null,
-    isProcessing: false
+    isProcessing: false,
+    aiManager: new AIManager()
 };
 
 // Initialize UI Engine
@@ -21,6 +23,22 @@ const ui = new UIEngine();
 function initGame() {
     ui.initialize();
 
+    // Setup API Key Input
+    if (ui.elements.btnStartGame) {
+        ui.elements.btnStartGame.onclick = () => {
+            const key = ui.elements.apiKeyInput.value.trim();
+            if (key) {
+                gameState.aiManager.setApiKey(key);
+                ui.hideLayer('setup');
+                startGameLoop();
+            } else {
+                alert("API Key를 입력해주세요.");
+            }
+        };
+    }
+}
+
+function startGameLoop() {
     // Wire up inventory
     ui.onInventoryClick = () => {
         ui.renderInventory(gameState.party, (itemIndex, charIndex) => {
@@ -69,7 +87,7 @@ function initGame() {
     turnPage();
 }
 
-function turnPage() {
+async function turnPage() {
     if (gameState.isProcessing) return;
 
     // Generate new page
@@ -89,6 +107,22 @@ function turnPage() {
 
     // Render Buttons
     ui.setButtons(newPage.choices, handleAction);
+
+    // Trigger AI Reaction
+    triggerAiReaction(newPage);
+}
+
+async function triggerAiReaction(page) {
+    // Visual indicator that AI is thinking?
+    // ui.log("...");
+
+    const reactions = await gameState.aiManager.generatePartyReaction(gameState.party.members, page);
+
+    if (reactions && Array.isArray(reactions)) {
+        reactions.forEach(reaction => {
+            ui.log(`>> ${reaction.name}: "${reaction.text}"`);
+        });
+    }
 }
 
 function updateVisuals(type) {

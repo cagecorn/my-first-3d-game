@@ -10,7 +10,8 @@ export class UIEngine {
             background: document.getElementById('layer-background'),
             game: document.getElementById('layer-game'),
             ui: document.getElementById('layer-ui'),
-            modal: document.getElementById('layer-modal')
+            modal: document.getElementById('layer-modal'),
+            setup: document.getElementById('layer-setup')
         };
 
         // Initialize Common Elements
@@ -21,7 +22,9 @@ export class UIEngine {
             pageNumber: document.getElementById('page-number'),
             sceneImage: document.getElementById('scene-image'),
             actionArea: document.getElementById('action-area'),
-            modalContent: document.getElementById('modal-content')
+            modalContent: document.getElementById('modal-content'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            btnStartGame: document.getElementById('btn-start-game')
         };
 
         // Setup Event Listeners
