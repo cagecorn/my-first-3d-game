@@ -1,215 +1,76 @@
-import { Character } from './character.js';
-import { Party } from './party.js';
-import { Book, EventType } from './book.js';
-import { CombatManager } from './combat.js';
-import { UIEngine } from './ui.js';
-import { ItemFactory } from './item.js';
-import { AIManager } from './ai/ai_manager.js';
+import { UIManager } from './ui_manager.js';
+import { BattleScene } from './game_scene.js';
+// Import other logic as needed (Party, Item, etc.) - keeping it simple for now
 
-// Game State
-const gameState = {
-    party: null,
-    book: null,
-    currentPage: null,
-    combatManager: null,
-    isProcessing: false,
-    aiManager: new AIManager()
-};
+class GameApp {
+    constructor() {
+        this.ui = new UIManager();
+        this.phaserGame = null;
+        this.apiKey = localStorage.getItem('google_api_key');
 
-// Initialize UI Engine
-const ui = new UIEngine();
+        this.init();
+    }
 
-// Initialize Game
-function initGame() {
-    ui.initialize();
+    init() {
+        // Setup UI Callbacks
+        this.ui.onStartGame = (key) => this.handleStartGame(key);
+        this.ui.onTurnPage = () => this.handleTurnPage();
+        this.ui.onInventory = () => this.handleInventory();
 
-    // Setup API Key Input
-    if (ui.elements.btnStartGame) {
-        ui.elements.btnStartGame.onclick = () => {
-            const key = ui.elements.apiKeyInput.value.trim();
-            if (key) {
-                gameState.aiManager.setApiKey(key);
-                ui.hideLayer('setup');
-                startGameLoop();
-            } else {
-                alert("Please enter API Key.");
+        // Check for existing API Key
+        if (this.apiKey) {
+            this.ui.hideSetup();
+            this.ui.log("Grimoire connected. Welcome back.");
+            this.startPhaser();
+        } else {
+            this.ui.showSetup();
+        }
+    }
+
+    handleStartGame(key) {
+        this.apiKey = key;
+        localStorage.setItem('google_api_key', key);
+        this.ui.hideSetup();
+        this.ui.log("Key accepted. The Grimoire opens...");
+        this.startPhaser();
+    }
+
+    startPhaser() {
+        const config = {
+            type: Phaser.AUTO,
+            parent: 'phaser-container',
+            width: 550, // Approx half of book width
+            height: 600, // Approx height
+            backgroundColor: '#1a1a1a',
+            scene: [BattleScene],
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
             }
         };
-    }
-}
 
-function startGameLoop() {
-    // Wire up inventory
-    ui.onInventoryClick = () => {
-        ui.renderInventory(gameState.party, (itemIndex, charIndex) => {
-            const item = gameState.party.inventory[itemIndex];
-            const char = gameState.party.getAliveMembers()[charIndex];
+        this.phaserGame = new Phaser.Game(config);
 
-            if (item && char) {
-                if (item.type === 'potion') {
-                     // Use potion
-                     const healAmount = item.value;
-                     char.heal(healAmount);
-                     gameState.party.removeItem(item);
-                     ui.log(`>> Used ${item.name} on ${char.name}. Healed ${healAmount} HP.`);
-                } else {
-                    // Equip
-                    const oldItem = char.equipItem(item);
-                    gameState.party.removeItem(item);
-                    if (oldItem) {
-                        gameState.party.addItem(oldItem);
-                        ui.log(`>> ${char.name}: Unequipped ${oldItem.name}, Equipped ${item.name}.`);
-                    } else {
-                        ui.log(`>> ${char.name}: Equipped ${item.name}.`);
-                    }
-                }
-
-                ui.updateParty(gameState.party.members);
-                ui.hideModal();
-            }
+        // Listen for events from Phaser
+        this.phaserGame.events.on('log-text', (text, type) => {
+            this.ui.log(text, type);
         });
-    };
 
-    ui.log("Initializing Game...");
-
-    gameState.party = new Party();
-    gameState.book = new Book(gameState.aiManager);
-
-    // Create default party
-    gameState.party.addMember(new Character("Hero", "Warrior"));
-    gameState.party.addMember(new Character("Mage", "Mage"));
-    gameState.party.addMember(new Character("Rogue", "Rogue"));
-    gameState.party.addMember(new Character("Cleric", "Cleric"));
-
-    ui.updateParty(gameState.party.members);
-
-    // Start with the first page
-    turnPage();
-}
-
-async function turnPage() {
-    if (gameState.isProcessing) return;
-    gameState.isProcessing = true;
-
-    ui.log("Turning page...");
-
-    // Generate new page
-    const newPage = await gameState.book.generateNextPage();
-    gameState.currentPage = newPage;
-
-    gameState.isProcessing = false;
-
-    // Update UI
-    ui.updatePageInfo(newPage.title, newPage.id);
-
-    // Update Visuals based on event type
-    updateVisuals(newPage.type);
-
-    // Log the description
-    ui.clearLog(); // Clear previous page text? Or keep history? "Scrolling text area" implies history.
-    // Actually, prompts say "Right Page Top: Story Log". If it scrolls, maybe we just append.
-    // But usually in page-turn games, you clear the old scene. Let's append with a divider.
-    ui.log("--------------------------------------------------");
-    ui.log(newPage.description);
-
-    // Render Buttons
-    ui.setButtons(newPage.choices, handleAction);
-}
-
-
-function updateVisuals(type) {
-    let color = "#ccc";
-    let text = "Scene Image";
-
-    switch (type) {
-        case EventType.BATTLE:
-            color = "#5c2b2b";
-            text = "⚔️ BATTLE ⚔️";
-            break;
-        case EventType.TREASURE:
-            color = "#d4af37";
-            text = "💎 TREASURE 💎";
-            break;
-        case EventType.REST:
-            color = "#4a6fa5";
-            text = "⛺ REST ⛺";
-            break;
-        case EventType.STORY:
-            color = "#555";
-            text = "📖 STORY 📖";
-            break;
+        this.ui.log("Visual engine initialized.");
     }
 
-    ui.updateScene(type, text, color);
-}
+    handleTurnPage() {
+        this.ui.log("You turn the page...", 'normal');
+        // Logic to generate new encounter, update Phaser scene, etc.
+        // For now, trigger a dummy effect in Phaser if needed, or just log.
+    }
 
-function handleAction(actionKey) {
-    switch (actionKey) {
-        case "nextPage":
-            turnPage();
-            break;
-        case "startCombat":
-            startCombat();
-            break;
-        case "openChest":
-            const goldAmount = 100;
-            const newItem = ItemFactory.createRandomItem();
-
-            gameState.party.gold += goldAmount;
-            gameState.party.addItem(newItem);
-
-            ui.log(`>> You opened the chest! Found ${goldAmount} gold and [${newItem.name}].`);
-            turnPage();
-            break;
-        case "rest":
-            ui.log(">> The party rests. HP and AP recovered.");
-            gameState.party.members.forEach(m => {
-                m.heal(20);
-                m.ap = 0; // Reset AP on rest? Or fill it? Let's say reset for combat fairness or fill?
-                // Usually rest recovers everything.
-            });
-            ui.updateParty(gameState.party.members);
-            turnPage();
-            break;
-        default:
-            console.warn("Unknown action:", actionKey);
-            turnPage();
+    handleInventory() {
+        this.ui.log("Inventory is empty (Work in Progress).");
     }
 }
 
-function startCombat() {
-    gameState.isProcessing = true; // Block page turning
-    ui.clearButtons(); // Hide buttons
-
-    const difficulty = Math.floor(gameState.book.currentPageNumber / 5) + 1;
-    // Get enemy hint from book if available
-    const enemyHint = gameState.book.currentEnemies || "Monster";
-
-    gameState.combatManager = new CombatManager(
-        gameState.party,
-        (msg) => ui.log(msg),
-        () => ui.updateParty(gameState.party.members),
-        (isWin) => {
-            gameState.isProcessing = false;
-            gameState.combatManager = null;
-            if (isWin) {
-                // Drop Item chance
-                if (Math.random() < 0.5) {
-                    const dropItem = ItemFactory.createRandomItem();
-                    gameState.party.addItem(dropItem);
-                    ui.log(`>> Victory Loot: [${dropItem.name}]!`);
-                }
-                turnPage();
-            } else {
-                alert("Game Over");
-                location.reload();
-            }
-        }
-    );
-
-    gameState.combatManager.startCombat(difficulty, enemyHint);
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-    initGame();
+// Start the Application
+window.addEventListener('DOMContentLoaded', () => {
+    window.app = new GameApp();
 });
