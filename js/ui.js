@@ -5,7 +5,6 @@ export class UIEngine {
     }
 
     initialize() {
-        // Initialize Layers
         this.layers = {
             background: document.getElementById('layer-background'),
             game: document.getElementById('layer-game'),
@@ -14,7 +13,6 @@ export class UIEngine {
             setup: document.getElementById('layer-setup')
         };
 
-        // Initialize Common Elements
         this.elements = {
             partyContainer: document.getElementById('party-status'),
             log: document.getElementById('game-log'),
@@ -27,45 +25,49 @@ export class UIEngine {
             btnStartGame: document.getElementById('btn-start-game')
         };
 
-        // Setup Event Listeners
         const modalCloseBtn = document.getElementById('modal-close-btn');
         if (modalCloseBtn) {
             modalCloseBtn.onclick = () => this.hideModal();
         }
 
-        // Inventory Button
         const invBtn = document.getElementById('btn-inventory');
         if (invBtn) {
             invBtn.onclick = () => {
                 if (this.onInventoryClick) this.onInventoryClick();
             }
         }
-
-        console.log("UI Engine Initialized");
     }
 
-    /* --- Layer Management --- */
-
     showLayer(layerName) {
-        if (this.layers[layerName]) {
-            this.layers[layerName].style.display = 'block';
-        }
+        if (this.layers[layerName]) this.layers[layerName].style.display = 'block';
     }
 
     hideLayer(layerName) {
-        if (this.layers[layerName]) {
-            this.layers[layerName].style.display = 'none';
-        }
+        if (this.layers[layerName]) this.layers[layerName].style.display = 'none';
     }
 
-    /* --- Content Updates --- */
+    /* --- Typewriter Log --- */
 
     log(message) {
         if (!this.elements.log) return;
+
+        // Add new paragraph
         const p = document.createElement('p');
-        p.innerText = message;
         this.elements.log.appendChild(p);
-        this.elements.log.scrollTop = this.elements.log.scrollHeight;
+
+        // Typewriter effect
+        let i = 0;
+        const speed = 20; // ms per char
+
+        const typeWriter = () => {
+            if (i < message.length) {
+                p.textContent += message.charAt(i);
+                i++;
+                this.elements.log.scrollTop = this.elements.log.scrollHeight;
+                setTimeout(typeWriter, speed);
+            }
+        };
+        typeWriter();
     }
 
     clearLog() {
@@ -89,24 +91,38 @@ export class UIEngine {
     updateParty(partyMembers) {
         if (!this.elements.partyContainer) return;
 
-        this.elements.partyContainer.innerHTML = ''; // Clear current
+        this.elements.partyContainer.innerHTML = '';
 
         partyMembers.forEach(member => {
             const card = document.createElement('div');
             card.className = 'char-card';
 
-            // Visual feedback for dead state
             if (!member.isAlive()) {
                 card.style.opacity = 0.5;
                 card.style.backgroundColor = "#444";
             }
 
-            // HTML Structure for card
+            // AP Calculation safely
+            const currentAp = member.ap || 0;
+            const maxAp = member.maxAp || 100;
+            const apPercent = Math.min(100, (currentAp / maxAp) * 100);
+
             card.innerHTML = `
-                <strong>${member.name}</strong>
-                <span>Lv.${member.level} ${member.jobClass}</span>
-                <div style="font-size: 0.9em;">HP: <span style="color:${this._getHpColor(member)}">${Math.floor(member.hp)}/${member.maxHp}</span></div>
-                <div style="font-size: 0.9em;">MP: ${member.mp}/${member.maxMp}</div>
+                <div style="display:flex; justify-content:space-between;">
+                    <strong>${member.name}</strong>
+                    <small>Lv.${member.level} ${member.jobClass}</small>
+                </div>
+                <div class="bar-container hp-bar-container">
+                    <div class="bar hp-bar" style="width: ${(member.hp/member.maxHp)*100}%; background-color: ${this._getHpColor(member)};"></div>
+                    <span class="bar-text">${Math.floor(member.hp)}/${member.maxHp}</span>
+                </div>
+                <div class="bar-container mp-bar-container" style="margin-top:2px;">
+                    <div class="bar mp-bar" style="width: ${(member.mp/member.maxMp)*100}%; background-color: #4a90e2;"></div>
+                    <span class="bar-text">${member.mp}/${member.maxMp}</span>
+                </div>
+                <div class="bar-container ap-bar-container" style="margin-top:2px; height: 5px;">
+                    <div class="bar ap-bar" style="width: ${apPercent}%; background-color: #f1c40f;"></div>
+                </div>
             `;
             this.elements.partyContainer.appendChild(card);
         });
@@ -114,12 +130,10 @@ export class UIEngine {
 
     _getHpColor(member) {
         const ratio = member.hp / member.maxHp;
-        if (ratio < 0.3) return "red";
-        if (ratio < 0.6) return "orange";
-        return "green";
+        if (ratio < 0.3) return "#e74c3c";
+        if (ratio < 0.6) return "#f39c12";
+        return "#2ecc71";
     }
-
-    /* --- Interaction --- */
 
     setButtons(choices, callback) {
         if (!this.elements.actionArea) return;
@@ -140,12 +154,10 @@ export class UIEngine {
         }
     }
 
-    /* --- Modals --- */
-
     showModal(contentHtml) {
         if (this.elements.modalContent && this.layers.modal) {
             this.elements.modalContent.innerHTML = contentHtml;
-            this.layers.modal.style.display = 'flex'; // Assuming flex for centering
+            this.layers.modal.style.display = 'flex';
         }
     }
 
@@ -156,10 +168,9 @@ export class UIEngine {
     }
 
     renderInventory(party, onEquip) {
-        let html = `<h3>🎒 인벤토리</h3>`;
-
+        let html = `<h3>🎒 Inventory</h3>`;
         if (party.inventory.length === 0) {
-            html += `<p>인벤토리가 비어있습니다.</p>`;
+            html += `<p>Empty.</p>`;
         } else {
             html += `<ul style="list-style: none; padding: 0;">`;
             party.inventory.forEach((item, index) => {
@@ -176,10 +187,7 @@ export class UIEngine {
             });
             html += `</ul>`;
         }
-
         this.showModal(html);
-
-        // Bind events
         setTimeout(() => {
             const buttons = this.elements.modalContent.querySelectorAll('.equip-btn');
             buttons.forEach(btn => {
@@ -193,22 +201,12 @@ export class UIEngine {
     }
 
     _renderEquipButtons(item, party, itemIndex) {
-        // Dropdown or list of buttons for each character
         let html = '';
-        if (item.type === 'weapon' || item.type === 'armor') {
-            party.getAliveMembers().forEach((char, charIndex) => {
-                html += `<button class="equip-btn" data-index="${itemIndex}" data-char="${charIndex}" style="margin-left: 5px; cursor:pointer;">
-                    To ${char.name}
-                </button>`;
-            });
-        } else if (item.type === 'potion') {
-            // Use logic
-             party.getAliveMembers().forEach((char, charIndex) => {
-                html += `<button class="equip-btn" data-index="${itemIndex}" data-char="${charIndex}" style="margin-left: 5px; cursor:pointer;">
-                    Use on ${char.name}
-                </button>`;
-            });
-        }
+        party.getAliveMembers().forEach((char, charIndex) => {
+            html += `<button class="equip-btn" data-index="${itemIndex}" data-char="${charIndex}" style="margin-left: 5px; cursor:pointer;">
+                ${char.name}
+            </button>`;
+        });
         return html;
     }
 }

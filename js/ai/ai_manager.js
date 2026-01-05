@@ -12,15 +12,70 @@ export class AIManager {
         this.apiKey = key;
     }
 
+    async generateStory(template, keywords) {
+        if (!this.apiKey) {
+            console.warn("No API Key provided, returning fallback text.");
+            return this._generateFallbackText(template, keywords);
+        }
+
+        let prompt = template.prompt;
+
+        // Replace placeholders with keywords
+        for (const [key, value] of Object.entries(keywords)) {
+            prompt = prompt.replace(`{${key}}`, value);
+        }
+
+        const fullPrompt = `
+You are the Dungeon Master of a dark fantasy RPG.
+Generate a short, atmospheric description (2-3 sentences) based on the following prompt.
+Do not use markdown. Do not add commentary. Just the story text.
+
+Prompt: ${prompt}
+        `;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: fullPrompt
+                        }]
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                console.error("AI API Error:", response.status, response.statusText);
+                return this._generateFallbackText(template, keywords);
+            }
+
+            const data = await response.json();
+            const textResult = data.candidates[0].content.parts[0].text;
+            return textResult.trim();
+
+        } catch (e) {
+            console.error("AI Generation failed:", e);
+            return this._generateFallbackText(template, keywords);
+        }
+    }
+
+    _generateFallbackText(template, keywords) {
+        // Simple fallback if API fails
+        let text = template.prompt;
+        for (const [key, value] of Object.entries(keywords)) {
+            text = text.replace(`{${key}}`, value);
+        }
+        return text + " (AI Connection Failed)";
+    }
+
     async generatePartyReaction(partyMembers, pageEvent) {
         if (!this.apiKey) {
             return [];
         }
-
-        // Filter out the Player (Warrior/First member) usually, but logic asks for "Other 3 members".
-        // Assuming partyMembers[0] is the player.
-        // But let's look at the party array. In main.js: Hero(Warrior), Mage, Rogue, Healer(Cleric).
-        // The prompt says "Generate for Mage, Rogue, Cleric".
 
         // Context Building
         const context = this._buildContext(partyMembers, pageEvent);

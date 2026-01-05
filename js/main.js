@@ -32,7 +32,7 @@ function initGame() {
                 ui.hideLayer('setup');
                 startGameLoop();
             } else {
-                alert("API Key를 입력해주세요.");
+                alert("Please enter API Key.");
             }
         };
     }
@@ -51,35 +51,35 @@ function startGameLoop() {
                      const healAmount = item.value;
                      char.heal(healAmount);
                      gameState.party.removeItem(item);
-                     ui.log(`>> ${char.name}에게 ${item.name}을(를) 사용했습니다. 체력 ${healAmount} 회복.`);
+                     ui.log(`>> Used ${item.name} on ${char.name}. Healed ${healAmount} HP.`);
                 } else {
                     // Equip
                     const oldItem = char.equipItem(item);
                     gameState.party.removeItem(item);
                     if (oldItem) {
                         gameState.party.addItem(oldItem);
-                        ui.log(`>> ${char.name}: ${oldItem.name} 해제, ${item.name} 장착.`);
+                        ui.log(`>> ${char.name}: Unequipped ${oldItem.name}, Equipped ${item.name}.`);
                     } else {
-                        ui.log(`>> ${char.name}: ${item.name} 장착.`);
+                        ui.log(`>> ${char.name}: Equipped ${item.name}.`);
                     }
                 }
 
                 ui.updateParty(gameState.party.members);
-                ui.hideModal(); // Close after action
+                ui.hideModal();
             }
         });
     };
 
-    ui.log("게임을 초기화합니다...");
+    ui.log("Initializing Game...");
 
     gameState.party = new Party();
-    gameState.book = new Book();
+    gameState.book = new Book(gameState.aiManager);
 
     // Create default party
     gameState.party.addMember(new Character("Hero", "Warrior"));
     gameState.party.addMember(new Character("Mage", "Mage"));
     gameState.party.addMember(new Character("Rogue", "Rogue"));
-    gameState.party.addMember(new Character("Healer", "Cleric"));
+    gameState.party.addMember(new Character("Cleric", "Cleric"));
 
     ui.updateParty(gameState.party.members);
 
@@ -89,10 +89,15 @@ function startGameLoop() {
 
 async function turnPage() {
     if (gameState.isProcessing) return;
+    gameState.isProcessing = true;
+
+    ui.log("Turning page...");
 
     // Generate new page
-    const newPage = gameState.book.generateNextPage();
+    const newPage = await gameState.book.generateNextPage();
     gameState.currentPage = newPage;
+
+    gameState.isProcessing = false;
 
     // Update UI
     ui.updatePageInfo(newPage.title, newPage.id);
@@ -101,29 +106,16 @@ async function turnPage() {
     updateVisuals(newPage.type);
 
     // Log the description
-    ui.log(""); // Spacer
-    ui.log(`[${newPage.title}]`);
+    ui.clearLog(); // Clear previous page text? Or keep history? "Scrolling text area" implies history.
+    // Actually, prompts say "Right Page Top: Story Log". If it scrolls, maybe we just append.
+    // But usually in page-turn games, you clear the old scene. Let's append with a divider.
+    ui.log("--------------------------------------------------");
     ui.log(newPage.description);
 
     // Render Buttons
     ui.setButtons(newPage.choices, handleAction);
-
-    // Trigger AI Reaction
-    triggerAiReaction(newPage);
 }
 
-async function triggerAiReaction(page) {
-    // Visual indicator that AI is thinking?
-    // ui.log("...");
-
-    const reactions = await gameState.aiManager.generatePartyReaction(gameState.party.members, page);
-
-    if (reactions && Array.isArray(reactions)) {
-        reactions.forEach(reaction => {
-            ui.log(`>> ${reaction.name}: "${reaction.text}"`);
-        });
-    }
-}
 
 function updateVisuals(type) {
     let color = "#ccc";
@@ -166,12 +158,16 @@ function handleAction(actionKey) {
             gameState.party.gold += goldAmount;
             gameState.party.addItem(newItem);
 
-            ui.log(`>> 상자를 열었습니다! ${goldAmount} 골드와 [${newItem.name}]을(를) 획득했습니다.`);
+            ui.log(`>> You opened the chest! Found ${goldAmount} gold and [${newItem.name}].`);
             turnPage();
             break;
         case "rest":
-            ui.log(">> 파티가 휴식을 취했습니다. 체력이 회복됩니다.");
-            gameState.party.members.forEach(m => m.heal(20));
+            ui.log(">> The party rests. HP and AP recovered.");
+            gameState.party.members.forEach(m => {
+                m.heal(20);
+                m.ap = 0; // Reset AP on rest? Or fill it? Let's say reset for combat fairness or fill?
+                // Usually rest recovers everything.
+            });
             ui.updateParty(gameState.party.members);
             turnPage();
             break;
@@ -185,15 +181,14 @@ function startCombat() {
     gameState.isProcessing = true; // Block page turning
     ui.clearButtons(); // Hide buttons
 
-    // Wrapper function to bind the UI instance's log method context if needed,
-    // but here we just pass a lambda calling ui.log
-    const logWrapper = (msg) => ui.log(msg);
-    const updatePartyWrapper = () => ui.updateParty(gameState.party.members);
+    const difficulty = Math.floor(gameState.book.currentPageNumber / 5) + 1;
+    // Get enemy hint from book if available
+    const enemyHint = gameState.book.currentEnemies || "Monster";
 
     gameState.combatManager = new CombatManager(
         gameState.party,
-        logWrapper,
-        updatePartyWrapper,
+        (msg) => ui.log(msg),
+        () => ui.updateParty(gameState.party.members),
         (isWin) => {
             gameState.isProcessing = false;
             gameState.combatManager = null;
@@ -202,18 +197,17 @@ function startCombat() {
                 if (Math.random() < 0.5) {
                     const dropItem = ItemFactory.createRandomItem();
                     gameState.party.addItem(dropItem);
-                    ui.log(`>> 승리 보상으로 [${dropItem.name}]을(를) 획득했습니다!`);
+                    ui.log(`>> Victory Loot: [${dropItem.name}]!`);
                 }
                 turnPage();
             } else {
                 alert("Game Over");
-                location.reload(); // Simple restart
+                location.reload();
             }
         }
     );
 
-    const difficulty = Math.floor(gameState.book.currentPageNumber / 5) + 1;
-    gameState.combatManager.startCombat(difficulty);
+    gameState.combatManager.startCombat(difficulty, enemyHint);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
