@@ -35,6 +35,67 @@ export class Character {
         this.recalculateStats();
         this.hp = this.maxHp;
         this.mp = this.maxMp;
+
+        // Memory System
+        this.memory_tags = {
+            traits: [],
+            titles: [],
+            relationships: []
+        };
+    }
+
+    // --- Memory System Methods ---
+    addTag(category, tag) {
+        if (this.memory_tags[category] && !this.memory_tags[category].includes(tag)) {
+            this.memory_tags[category].push(tag);
+        }
+    }
+
+    removeTag(category, tag) {
+        if (this.memory_tags[category]) {
+            this.memory_tags[category] = this.memory_tags[category].filter(t => t !== tag);
+        }
+    }
+
+    hasTag(category, tag) {
+        return this.memory_tags[category] && this.memory_tags[category].includes(tag);
+    }
+
+    // --- Serialization ---
+    getData() {
+        return {
+            name: this.name,
+            jobClass: this.jobClass,
+            level: this.level,
+            exp: this.exp,
+            maxExp: this.maxExp,
+            stats: { ...this.stats },
+            hp: this.hp,
+            mp: this.mp,
+            equipment: { ...this.equipment }, // Deep copy if needed, but simple objects are fine
+            memory_tags: JSON.parse(JSON.stringify(this.memory_tags)) // Deep copy
+        };
+    }
+
+    static fromData(data) {
+        const char = new Character(data.name, data.jobClass);
+        char.level = data.level;
+        char.exp = data.exp;
+        char.maxExp = data.maxExp;
+        char.stats = { ...data.stats };
+        char.hp = data.hp;
+        char.mp = data.mp;
+        char.equipment = { ...data.equipment };
+        char.memory_tags = data.memory_tags || { traits: [], titles: [], relationships: [] };
+
+        char.recalculateStats();
+        // Recalculate overwrites maxHp/maxMp, but we might want to preserve current HP if it's lower.
+        // Or if we load, we assume correct state.
+        // Actually, recalculateStats uses vit/int to set maxHp/maxMp.
+        // If data.hp > new maxHp, clamp it.
+        // But let's assume loaded data is consistent.
+
+        return char;
     }
 
     applyClassModifiers() {
