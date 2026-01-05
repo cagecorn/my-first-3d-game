@@ -3,80 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text Roguelike: The Book</title>
+    <title>The Grimoire of Variables</title>
     <link rel="stylesheet" href="css/style.css">
+    <!-- Phaser 3 via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
     <div id="game-container">
-        <!-- UI Layers Wrapper -->
-        <div id="ui-layers">
+        <!-- Background Layer -->
+        <div id="layer-background" class="absolute inset-0 bg-gray-900 -z-10"></div>
 
-            <!-- Layer 0: Background -->
-            <div id="layer-background" class="ui-layer">
-                <!-- Background effects can go here -->
+        <!-- The Book Container -->
+        <div id="book" class="flex relative w-[95%] h-[90%] max-w-[1400px] bg-[#e8dcb5] text-gray-900 border-[15px] border-[#4a3b2a] rounded-lg shadow-2xl">
+
+            <!-- Left Page: Phaser (Visuals) -->
+            <div class="page left-page flex-1 border-r-2 border-[#a09070] relative overflow-hidden bg-black">
+                <div id="phaser-container" class="w-full h-full"></div>
             </div>
 
-            <!-- Layer 1: The Main Game (The Book) -->
-            <div id="layer-game" class="ui-layer">
-                <div id="book">
-                    <!-- Left Page: Visuals & Party -->
-                    <div class="page left-page">
-                        <div class="visual-container">
-                            <div id="scene-image" class="placeholder-image">Scene Image Placeholder</div>
-                        </div>
-                        <div class="party-container" id="party-status">
-                            <!-- Character cards will be injected here -->
-                        </div>
-                    </div>
+            <!-- Right Page: HTML (Text & Controls) -->
+            <div class="page right-page flex-1 p-6 flex flex-col relative overflow-hidden bg-[#f4e4bc]">
 
-                    <!-- Right Page: Text & Controls -->
-                    <div class="page right-page">
-                        <div class="content-header">
-                            <h2 id="page-title">Chapter 1</h2>
-                            <span id="page-number">Page 1</span>
-                        </div>
-                        <div class="text-log" id="game-log">
-                            <p>모험이 시작됩니다...</p>
-                        </div>
-                        <div class="controls" id="action-area">
-                            <!-- Buttons injected here -->
-                        </div>
+                <!-- Story Log -->
+                <div id="story-log" class="flex-grow overflow-y-auto mb-4 p-4 font-serif text-lg leading-relaxed border border-[#d0c0a0] bg-white/30 shadow-inner">
+                    <div class="log-entry mb-4 text-gray-700 italic">
+                        The Grimoire awaits your command...
                     </div>
+                </div>
+
+                <!-- Controls -->
+                <div id="controls" class="h-[100px] border-t-2 border-[#4a3b2a] pt-4 flex gap-2 justify-center items-center">
+                    <button id="btn-turn-page" class="px-6 py-2 bg-[#4a3b2a] text-[#e8dcb5] font-bold rounded shadow hover:bg-[#6a5b4a] transition">
+                        Turn Page
+                    </button>
+                    <button id="btn-inventory" class="px-6 py-2 bg-[#6a5b4a] text-[#e8dcb5] font-bold rounded shadow hover:bg-[#8a7b6a] transition">
+                        Inventory
+                    </button>
                 </div>
             </div>
 
-            <!-- Layer 2: UI Overlay (HUD, Floating Text - optional for now) -->
-            <div id="layer-ui" class="ui-layer" style="pointer-events: none;">
-                <div style="pointer-events: auto; position: absolute; bottom: 20px; right: 20px;">
-                    <button id="btn-inventory" class="action-btn">🎒 인벤토리</button>
-                </div>
-            </div>
-
-            <!-- Layer 3: Modal / Popups -->
-            <div id="layer-modal" class="ui-layer" style="display: none;">
-                <div id="modal-container">
-                    <div id="modal-content">
-                        <!-- Dynamic Content -->
-                    </div>
-                    <button id="modal-close-btn">Close</button>
-                </div>
-            </div>
-
-            <!-- Layer 4: Setup (API Key) -->
-            <div id="layer-setup" class="ui-layer" style="display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 9999;">
-                <div style="background: #222; padding: 30px; border: 2px solid #555; text-align: center; color: white; max-width: 400px;">
-                    <h2>API 설정</h2>
-                    <p style="margin-bottom: 20px;">AI 동료들과 함께 모험을 떠나기 위해<br>Google AI Studio API Key가 필요합니다.</p>
-                    <input type="password" id="api-key-input" placeholder="Paste API Key Here" style="width: 100%; padding: 10px; margin-bottom: 20px; box-sizing: border-box;">
-                    <div style="display: flex; gap: 10px; justify-content: center;">
-                        <button id="btn-start-game" class="action-btn" style="width: auto; padding: 10px 20px;">게임 시작</button>
-                    </div>
-                    <p style="margin-top: 15px; font-size: 0.8em; color: #aaa;">키는 저장되지 않고 현재 세션에만 사용됩니다.</p>
-                </div>
-            </div>
-
+            <!-- Book Spine/Center Shadow -->
+            <div class="absolute left-1/2 top-0 bottom-0 w-[40px] -ml-[20px] bg-gradient-to-r from-transparent via-black/20 to-transparent pointer-events-none z-10"></div>
         </div>
+
+        <!-- API Setup Modal -->
+        <div id="layer-setup" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+            <div class="bg-gray-800 p-8 rounded-lg border border-gray-600 text-center max-w-md w-full text-white">
+                <h2 class="text-2xl font-bold mb-4 text-[#e8dcb5]">Grimoire Setup</h2>
+                <p class="mb-4 text-gray-300">Enter your Google AI Studio API Key to breathe life into this world.</p>
+                <input type="password" id="api-key-input" class="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white" placeholder="API Key">
+                <button id="btn-start-game" class="w-full py-2 bg-[#8e44ad] hover:bg-[#9b59b6] text-white font-bold rounded transition">
+                    Enter the Book
+                </button>
+                <p class="mt-4 text-xs text-gray-500">Keys are stored in localStorage for your convenience.</p>
+            </div>
+        </div>
+
     </div>
+
+    <!-- Main Entry Point -->
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
