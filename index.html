@@ -2,53 +2,42 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>내 첫 3D 게임</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/enable3d@0.25.4/dist/enable3d.phaserExtension.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Roguelike: The Book</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="game-container"></div>
+    <div id="game-container">
+        <div id="book">
+            <!-- Left Page: Visuals & Party -->
+            <div class="page left-page">
+                <div class="visual-container">
+                    <div id="scene-image" class="placeholder-image">Scene Image Placeholder</div>
+                </div>
+                <div class="party-container" id="party-status">
+                    <!-- Character cards will be injected here -->
+                    <div class="char-card">P1</div>
+                    <div class="char-card">P2</div>
+                    <div class="char-card">P3</div>
+                    <div class="char-card">P4</div>
+                </div>
+            </div>
 
-    <script>
-        // 2. 여기서부터 게임 설정을 시작합니다.
-        const { Enable3d, Scene3d } = window.enable3d;
-
-        class MainScene extends Scene3d {
-            constructor() {
-                super({ key: 'MainScene' });
-            }
-
-            init() {
-                this.accessThirdDimension(); // 3D 모드 켜기
-            }
-
-            create() {
-                // 3D 공간 설정 (바닥, 하늘 등)
-                this.third.warpSpeed(); 
-
-                // 간단한 상자 하나 만들기
-                this.third.add.box({ x: 0, y: 2, z: 0, color: 'red' });
-                
-                // 물리 효과가 적용된 상자 (떨어짐)
-                this.third.physics.add.box({ x: 0, y: 10, z: 0, color: 'blue' });
-            }
-        }
-
-        const config = {
-            type: Phaser.WEBGL,
-            transparent: true,
-            scale: {
-                mode: Phaser.Scale.FIT,
-                autoCenter: Phaser.Scale.CENTER_BOTH,
-                width: 800,
-                height: 600
-            },
-            scene: [MainScene],
-            ...Canvas() // Enable3d의 캔버스 설정 적용
-        };
-
-        // 3. 물리 엔진을 로드하고 게임 시작
-        PhysicsLoader('/lib/ammo/kripken', () => new Phaser.Game(config));
-    </script>
+            <!-- Right Page: Text & Controls -->
+            <div class="page right-page">
+                <div class="content-header">
+                    <h2 id="page-title">Chapter 1</h2>
+                    <span id="page-number">Page 1</span>
+                </div>
+                <div class="text-log" id="game-log">
+                    <p>모험이 시작됩니다...</p>
+                </div>
+                <div class="controls" id="action-area">
+                    <button id="btn-next" class="action-btn">페이지 넘기기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
