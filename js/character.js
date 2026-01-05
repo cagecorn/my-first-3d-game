@@ -42,6 +42,99 @@ export class Character {
             titles: [],
             relationships: []
         };
+
+        // MBTI System (-100 to 100)
+        // E (Extrovert) vs I (Introvert)
+        // S (Sensing) vs N (Intuition)
+        // T (Thinking) vs F (Feeling)
+        // J (Judging) vs P (Perceiving)
+        this.mbti = {
+            E: 0, // >0: Extroverted, <0: Introverted
+            S: 0, // >0: Sensing, <0: Intuition
+            T: 0, // >0: Thinking, <0: Feeling
+            J: 0  // >0: Judging, <0: Perceiving
+        };
+        this.mbti_type = "XXXX"; // Derived string
+    }
+
+    // --- MBTI System Methods ---
+    setMBTI(stats) {
+        this.mbti = { ...this.mbti, ...stats };
+        this.updateMBTIType();
+    }
+
+    adjustMBTI(axis, amount) {
+        if (this.mbti.hasOwnProperty(axis)) {
+            this.mbti[axis] = Math.max(-100, Math.min(100, this.mbti[axis] + amount));
+            this.updateMBTIType();
+        }
+    }
+
+    updateMBTIType() {
+        const e = this.mbti.E >= 0 ? 'E' : 'I';
+        const s = this.mbti.S >= 0 ? 'S' : 'N';
+        const t = this.mbti.T >= 0 ? 'T' : 'F';
+        const j = this.mbti.J >= 0 ? 'J' : 'P';
+        this.mbti_type = `${e}${s}${t}${j}`;
+    }
+
+    // --- Voting Logic ---
+    evaluateChoice(choice, partyState) {
+        let score = 0;
+        const action = choice.action;
+        const text = choice.text.toLowerCase();
+
+        // 1. Survival Check (Universal)
+        const hpPercent = this.hp / this.maxHp;
+        if (hpPercent < 0.3) {
+            // Critical condition
+            if (action === 'rest' || action === 'flee' || text.includes('leave')) {
+                score += 50;
+            } else if (action === 'startCombat' || action === 'fight') {
+                score -= 50;
+            }
+        }
+
+        // 2. MBTI Influences
+
+        // E (Extroversion) - Action oriented, bold
+        if (this.mbti.E > 0) {
+            if (action === 'startCombat' || action === 'openChest') score += (this.mbti.E * 0.2);
+            if (action === 'flee') score -= (this.mbti.E * 0.2);
+        } else {
+            // Introverted - Cautious
+            if (action === 'rest' || action === 'observe') score += (Math.abs(this.mbti.E) * 0.2);
+        }
+
+        // S (Sensing) - Practical, Tangible rewards
+        if (this.mbti.S > 0) {
+            if (action === 'openChest' || action === 'loot') score += (this.mbti.S * 0.3);
+        } else {
+            // Intuition - Curiosity, Unknown
+            if (text.includes('investigate') || text.includes('examine')) score += (Math.abs(this.mbti.S) * 0.3);
+        }
+
+        // T (Thinking) - Logical, Calculated risks
+        if (this.mbti.T > 0) {
+            // If healthy, fight is logical to gain XP/Loot? Maybe.
+            // But mostly about resource management.
+            if (hpPercent > 0.7 && action === 'startCombat') score += (this.mbti.T * 0.1);
+        } else {
+            // Feeling - People oriented, Values
+            // Hard to map to generic actions without more context, but let's say they prefer avoiding conflict if not necessary?
+            if (action === 'talk' || action === 'negotiate') score += (Math.abs(this.mbti.T) * 0.3);
+        }
+
+        // J (Judging) - Decisive, orderly
+        // Maybe they prefer sticking to the plan or definitive actions?
+        if (this.mbti.J > 0) {
+             if (action === 'nextPage') score += (this.mbti.J * 0.1); // Moving forward
+        }
+
+        // Add some randomness
+        score += (Math.random() * 10) - 5;
+
+        return score;
     }
 
     // --- Memory System Methods ---
@@ -73,7 +166,8 @@ export class Character {
             hp: this.hp,
             mp: this.mp,
             equipment: { ...this.equipment }, // Deep copy if needed, but simple objects are fine
-            memory_tags: JSON.parse(JSON.stringify(this.memory_tags)) // Deep copy
+            memory_tags: JSON.parse(JSON.stringify(this.memory_tags)), // Deep copy
+            mbti: { ...this.mbti }
         };
     }
 
@@ -87,6 +181,9 @@ export class Character {
         char.mp = data.mp;
         char.equipment = { ...data.equipment };
         char.memory_tags = data.memory_tags || { traits: [], titles: [], relationships: [] };
+        if (data.mbti) {
+            char.setMBTI(data.mbti);
+        }
 
         char.recalculateStats();
         // Recalculate overwrites maxHp/maxMp, but we might want to preserve current HP if it's lower.
