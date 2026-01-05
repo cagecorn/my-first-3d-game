@@ -40,6 +40,7 @@ class GameApp {
         if (this.apiKey) {
             this.aiManager.setApiKey(this.apiKey);
             this.ui.hideSetup();
+            this.initializeParty();
             this.ui.log("Grimoire connected. Welcome back.");
             this.startPhaser();
         } else {
