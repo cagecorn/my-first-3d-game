@@ -38,6 +38,7 @@ class GameApp {
 
         // Check for existing API Key
         if (this.apiKey) {
+            this.aiManager.setApiKey(this.apiKey);
             this.ui.hideSetup();
             this.ui.log("Grimoire connected. Welcome back.");
             this.startPhaser();
