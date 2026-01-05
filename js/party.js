@@ -24,6 +24,12 @@ export class Party {
         return this.members.filter(m => m.isAlive());
     }
 
+    getAverageLevel() {
+        if (this.members.length === 0) return 1;
+        const sum = this.members.reduce((acc, m) => acc + m.level, 0);
+        return Math.floor(sum / this.members.length);
+    }
+
     isWipedOut() {
         return this.getAliveMembers().length === 0;
     }

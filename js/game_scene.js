@@ -1,168 +1,179 @@
-// Imports from Logic (assuming these files exist and export correctly)
-// If logic files are not Modules yet, we might need to adjust.
-// For now, I'll mock the integration or assume the classes are available globally if they were scripts,
-// but since we are using type="module", we should import them.
-// Let's assume standard exports.
-
+// Imports from Logic are handled via data passed in
 import { Party } from './party.js';
-import { Character } from './character.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() {
         super({ key: 'BattleScene' });
-        this.party = []; // Array of visual objects
-        this.enemies = []; // Array of visual objects
-        this.isCombatActive = false;
+        this.visuals = new Map(); // Map<Character, Container>
     }
 
     preload() {
-        // Load placeholders
-        // We can generate textures programmatically in 'create', so no external assets needed yet.
+        // No assets to load yet
     }
 
-    create(data) {
-        // data passed from main.js (e.g. initial party state)
-        this.gameLogicParty = data.party; // The logic object
-
-        // Background (Canvas is black by default, but let's make it dark grey)
+    create() {
         this.cameras.main.setBackgroundColor('#1a1a1a');
 
-        // Create Visuals
-        this.createPartyVisuals();
-        this.createEnemyVisuals(); // Mock enemies for now
+        // Listen for global game events if needed, but we expect Main to call methods directly
+        // or we can set up an event emitter bridge.
 
-        // Event Listener for logic updates?
-        // In a real loop, update() drives the logic.
-
-        this.isCombatActive = true;
+        // Ideally, we wait for 'setupCombat' call.
+        this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, "Waiting for Combat...", { color: '#666' }).setOrigin(0.5);
     }
 
-    createPartyVisuals() {
+    setupCombat(partyMembers, enemies) {
+        this.children.removeAll(); // Clear previous scene
+        this.visuals.clear();
+
+        this.createPartyVisuals(partyMembers);
+        this.createEnemyVisuals(enemies);
+    }
+
+    createPartyVisuals(members) {
         const startX = 50;
         const startY = 300;
         const gap = 120;
 
-        // Mock party data if not provided (for testing visualization)
-        const partySize = 3;
-
-        for (let i = 0; i < partySize; i++) {
+        members.forEach((member, i) => {
             const x = startX + (i * gap);
             const y = startY;
 
-            // Character Container
             const container = this.add.container(x, y);
 
-            // Sprite Placeholder (Circle)
+            // Sprite Placeholder
             const circle = this.add.circle(0, 0, 30, 0x3498db);
             container.add(circle);
 
-            // Name Text
-            const name = this.add.text(0, 40, `Hero ${i+1}`, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
+            // Name
+            const name = this.add.text(0, 40, member.name, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
             container.add(name);
 
-            // HP Bar Background
+            // HP Bar
             const hpBg = this.add.rectangle(0, 55, 60, 6, 0x333333);
             container.add(hpBg);
-
-            // HP Bar Fill
             const hpFill = this.add.rectangle(-30, 55, 60, 6, 0xe74c3c).setOrigin(0, 0.5);
             container.add(hpFill);
 
-            // AP Bar Background
+            // AP Bar
             const apBg = this.add.rectangle(0, 65, 60, 6, 0x333333);
             container.add(apBg);
-
-            // AP Bar Fill
             const apFill = this.add.rectangle(-30, 65, 0, 6, 0xf1c40f).setOrigin(0, 0.5);
             container.add(apFill);
 
-            // Store ref for updates
-            this.party.push({
+            this.visuals.set(member, {
                 container,
-                apFill,
                 hpFill,
-                ap: 0,
-                speed: 1 + (Math.random() * 0.5), // Random speed
-                name: `Hero ${i+1}`
+                apFill,
+                sprite: circle,
+                maxWidth: 60
             });
-        }
+        });
     }
 
-    createEnemyVisuals() {
-        const startX = 400; // Right side of the left page
+    createEnemyVisuals(enemies) {
+        const startX = 400;
         const startY = 100;
         const gap = 100;
 
-        const enemySize = 2;
-
-        for (let i = 0; i < enemySize; i++) {
+        enemies.forEach((enemy, i) => {
             const x = startX;
             const y = startY + (i * gap);
 
             const container = this.add.container(x, y);
 
-            // Enemy Sprite (Square)
             const rect = this.add.rectangle(0, 0, 50, 50, 0xe74c3c);
             container.add(rect);
 
-            const name = this.add.text(0, 40, `Monster ${i+1}`, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
+            const name = this.add.text(0, 40, enemy.name, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
             container.add(name);
 
-            // Ref
-            this.enemies.push({
+            // HP/AP for enemies too?
+            // Minimal enemies usually just show HP or nothing. Let's add small HP bar.
+            const hpBg = this.add.rectangle(0, -35, 50, 4, 0x333333);
+            container.add(hpBg);
+            const hpFill = this.add.rectangle(-25, -35, 50, 4, 0xe74c3c).setOrigin(0, 0.5);
+            container.add(hpFill);
+
+            // AP Bar (optional for enemies, but good for strategy)
+            const apBg = this.add.rectangle(0, -30, 50, 4, 0x333333);
+            container.add(apBg);
+            const apFill = this.add.rectangle(-25, -30, 0, 4, 0xf1c40f).setOrigin(0, 0.5);
+            container.add(apFill);
+
+            this.visuals.set(enemy, {
                 container,
-                rect, // To flash
-                hp: 100,
-                maxHp: 100,
-                name: `Monster ${i+1}`
+                sprite: rect,
+                hpFill,
+                apFill,
+                maxWidth: 50
             });
-        }
+        });
     }
 
-    update(time, delta) {
-        if (!this.isCombatActive) return;
+    // --- Event Handlers ---
 
-        // Simulate AP Growth
-        this.party.forEach(hero => {
-            hero.ap += (hero.speed * delta * 0.05); // Speed factor
+    updateVisuals(updates) {
+        updates.forEach(update => {
+            const visual = this.visuals.get(update.char);
+            if (visual) {
+                // Update AP
+                visual.apFill.width = (update.ap / update.maxAp) * visual.maxWidth;
 
-            // Update Visual Bar (Max AP = 100)
-            const width = Phaser.Math.Clamp(hero.ap, 0, 100) * 0.6; // 60px wide bar
-            hero.apFill.width = width;
-
-            // Attack Trigger
-            if (hero.ap >= 100) {
-                hero.ap = 0;
-                this.performAttack(hero);
+                // Update HP
+                if (update.char.maxHp > 0) {
+                     visual.hpFill.width = (update.char.hp / update.char.maxHp) * visual.maxWidth;
+                }
             }
         });
     }
 
-    performAttack(attacker) {
-        // Pick random enemy
-        const targetIndex = Phaser.Math.Between(0, this.enemies.length - 1);
-        const target = this.enemies[targetIndex];
+    playAttackAnimation(attacker, target, damage) {
+        const attackerVis = this.visuals.get(attacker);
+        const targetVis = this.visuals.get(target);
 
-        // 1. Shake Camera
-        this.cameras.main.shake(100, 0.01);
+        if (attackerVis) {
+             // Jump forward tween
+             this.tweens.add({
+                 targets: attackerVis.container,
+                 x: attackerVis.container.x + (attackerVis.container.x < 300 ? 20 : -20),
+                 duration: 100,
+                 yoyo: true
+             });
+        }
 
-        // 2. Flash Target
-        this.tweens.add({
-            targets: target.rect,
-            alpha: 0,
-            duration: 50,
-            yoyo: true,
-            repeat: 1
-        });
+        if (targetVis) {
+            // Flash
+            this.tweens.add({
+                targets: targetVis.sprite,
+                alpha: 0,
+                duration: 50,
+                yoyo: true,
+                repeat: 1
+            });
 
-        // 3. Floating Text
-        const dmg = Phaser.Math.Between(10, 20);
-        this.showFloatingText(target.container.x, target.container.y, `-${dmg}`);
+            // Shake
+            // this.cameras.main.shake(100, 0.005); // Global shake might be too much if frequent
+            targetVis.container.x += 5;
+            this.time.delayedCall(50, () => targetVis.container.x -= 5);
 
-        // 4. Update Log (Call out to UI Manager via registry or event)
-        // Access the UI Manager passed in init or global?
-        // Best practice: Emit an event on the Game instance.
-        this.game.events.emit('log-text', `⚔️ **${attacker.name}** attacks **${target.name}** for ${dmg} damage!`, 'combat');
+            // Float Text
+            this.showFloatingText(targetVis.container.x, targetVis.container.y, `-${damage}`);
+        }
+    }
+
+    handleDeath(target) {
+        const vis = this.visuals.get(target);
+        if (vis) {
+            this.tweens.add({
+                targets: vis.container,
+                alpha: 0,
+                scale: 0,
+                duration: 500,
+                onComplete: () => {
+                    vis.container.setVisible(false);
+                }
+            });
+        }
     }
 
     showFloatingText(x, y, message) {
@@ -181,5 +192,9 @@ export class BattleScene extends Phaser.Scene {
             duration: 800,
             onComplete: () => text.destroy()
         });
+    }
+
+    update() {
+        // No logic here!
     }
 }

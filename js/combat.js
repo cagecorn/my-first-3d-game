@@ -1,12 +1,10 @@
 import { Character } from './character.js';
 
 export class CombatManager {
-    constructor(party, logCallback, updateUICallback, onCombatEnd) {
+    constructor(party, onEvent) {
         this.party = party;
         this.enemies = [];
-        this.log = logCallback;
-        this.updateUI = updateUICallback;
-        this.onCombatEnd = onCombatEnd;
+        this.onEvent = onEvent; // (type, data) => void
 
         this.isRunning = false;
         this.lastFrameTime = 0;
@@ -15,12 +13,16 @@ export class CombatManager {
 
     startCombat(difficultyLevel, enemyTypeHint) {
         this.generateEnemies(difficultyLevel, enemyTypeHint);
-        this.log(`Combat Started! ${this.enemies.length} enemies appearing.`);
 
         // Reset AP for everyone
         this.getAllCombatants().forEach(c => {
             c.ap = 0;
-            c.maxAp = 100; // Standardize max AP
+            c.maxAp = 100;
+        });
+
+        this.onEvent('combat_start', {
+            party: this.party.members,
+            enemies: this.enemies
         });
 
         this.isRunning = true;
@@ -53,25 +55,25 @@ export class CombatManager {
 
     update(deltaTime) {
         const combatants = this.getAllCombatants();
+        const updates = [];
 
         combatants.forEach(c => {
             if (c.isAlive()) {
-                // AP Growth: Speed * Multiplier * DeltaTime
-                // Base speed ~ 10. Max AP 100.
-                // If Speed 10 -> 10 * 2 * 1s = 20 AP/s -> 5 seconds per turn.
-                // Let's tune it.
+                // AP Growth
                 const apGain = c.spd * 5 * deltaTime;
                 c.ap += apGain;
 
+                updates.push({ char: c, ap: c.ap, maxAp: c.maxAp });
+
                 if (c.ap >= c.maxAp) {
-                    c.ap = 0; // Reset AP
+                    c.ap = 0;
                     this.performAction(c);
                 }
             }
         });
 
-        // UI Update (AP bars need to update smoothly)
-        this.updateUI();
+        // Emit update event for UI/Visuals
+        this.onEvent('combat_update', { updates });
     }
 
     performAction(actor) {
@@ -94,10 +96,15 @@ export class CombatManager {
         const rawDmg = Math.max(1, actor.atk - (target.def * 0.5));
         const actualDmg = target.takeDamage(rawDmg);
 
-        this.log(`${actor.name} attacks ${target.name} for ${Math.floor(actualDmg)} DMG!`);
+        this.onEvent('action', {
+            type: 'attack',
+            attacker: actor,
+            target: target,
+            damage: Math.floor(actualDmg)
+        });
 
         if (!target.isAlive()) {
-            this.log(`${target.name} collapses!`);
+            this.onEvent('death', { target: target });
         }
     }
 
@@ -130,7 +137,7 @@ export class CombatManager {
             enemy.stats.str = 5 + level * 2;
             enemy.stats.vit = 5 + level * 2;
             enemy.stats.dex = 5 + level;
-            enemy.spd = 5 + Math.random() * 5; // Random speed
+            enemy.spd = 5 + Math.random() * 5;
             enemy.recalculateStats();
             enemy.hp = enemy.maxHp;
 
@@ -140,18 +147,17 @@ export class CombatManager {
 
     endCombat(isWin) {
         this.stopCombat();
+
         if (isWin) {
-            this.log(`Victory! Gained XP.`);
             const expReward = 50;
             this.party.members.forEach(m => {
                 if (m.isAlive()) m.gainExp(expReward);
             });
-        } else {
-            this.log(`Defeat...`);
         }
 
+        // Delay slightly for effect
         setTimeout(() => {
-            this.onCombatEnd(isWin);
-        }, 2000);
+            this.onEvent('combat_end', { isWin });
+        }, 1000);
     }
 }
