@@ -1,3 +1,5 @@
+import { PageTemplates, WordDice } from './dice.js';
+
 // Event types
 export const EventType = {
     BATTLE: 'battle',
@@ -12,63 +14,62 @@ export class Page {
         this.type = type;
         this.title = title;
         this.description = description;
-        this.choices = choices; // Array of { text: string, action: function }
+        this.choices = choices;
     }
 }
 
 export class Book {
-    constructor() {
+    constructor(aiManager) {
         this.currentPageNumber = 0;
         this.chapter = 1;
+        this.dice = new WordDice();
+        this.aiManager = aiManager;
     }
 
-    generateNextPage() {
+    async generateNextPage() {
         this.currentPageNumber++;
-        const eventType = this.getRandomEventType();
+        const template = this.getRandomTemplate();
 
-        // Simple random generation logic
-        // In a real game, this would be more complex (weighted, dependent on chapter, etc.)
-        switch (eventType) {
-            case EventType.BATTLE:
-                return new Page(
-                    this.currentPageNumber,
-                    EventType.BATTLE,
-                    `페이지 ${this.currentPageNumber}: 위협적인 그림자`,
-                    "어두운 곳에서 몬스터들이 나타납니다! 전투를 준비하십시오.",
-                    [{ text: "전투 시작", action: "startCombat" }]
-                );
-            case EventType.TREASURE:
-                return new Page(
-                    this.currentPageNumber,
-                    EventType.TREASURE,
-                    `페이지 ${this.currentPageNumber}: 발견`,
-                    "낡은 상자가 덩그러니 놓여있습니다.",
-                    [{ text: "상자를 연다", action: "openChest" }, { text: "무시하고 지나간다", action: "nextPage" }]
-                );
-            case EventType.REST:
-                return new Page(
-                    this.currentPageNumber,
-                    EventType.REST,
-                    `페이지 ${this.currentPageNumber}: 잠시의 휴식`,
-                    "안전해 보이는 공터를 발견했습니다.",
-                    [{ text: "휴식을 취한다 (HP/MP 회복)", action: "rest" }, { text: "계속 이동한다", action: "nextPage" }]
-                );
-            default: // STORY
-                return new Page(
-                    this.currentPageNumber,
-                    EventType.STORY,
-                    `페이지 ${this.currentPageNumber}: 고요한 통로`,
-                    "특별한 일은 일어나지 않았습니다. 발소리만이 울려 퍼집니다.",
-                    [{ text: "다음 페이지로", action: "nextPage" }]
-                );
+        // Roll dice
+        const keywords = this.dice.rollForTemplate(template);
+
+        // Generate Story via AI
+        const storyText = await this.aiManager.generateStory(template, keywords);
+
+        let title = `Page ${this.currentPageNumber}`;
+        let choices = [];
+        let type = template.type;
+
+        if (type === 'battle') {
+            title = "Encounter!";
+            choices = [{ text: "Fight!", action: "startCombat" }];
+            // Store enemy info in the page object for the combat manager?
+            // For now, let's keep it simple. The combat manager will generate enemies.
+            // Ideally, we pass "keywords.monsters" to the combat manager.
+            this.currentEnemies = keywords.monsters;
+        } else if (type === 'treasure') {
+            title = "Discovery";
+            choices = [{ text: "Open Chest", action: "openChest" }, { text: "Leave it", action: "nextPage" }];
+        } else if (type === 'rest') {
+            title = "Rest Site";
+            choices = [{ text: "Rest (Recover HP/AP)", action: "rest" }, { text: "Continue", action: "nextPage" }];
+        } else {
+            title = "Journey";
+            choices = [{ text: "Turn Page", action: "nextPage" }];
         }
+
+        return new Page(
+            this.currentPageNumber,
+            type,
+            title,
+            storyText,
+            choices
+        );
     }
 
-    getRandomEventType() {
-        const rand = Math.random();
-        if (rand < 0.4) return EventType.BATTLE; // 40% Battle
-        if (rand < 0.6) return EventType.TREASURE; // 20% Treasure
-        if (rand < 0.7) return EventType.REST; // 10% Rest
-        return EventType.STORY; // 30% Nothing/Story
+    getRandomTemplate() {
+        const keys = Object.keys(PageTemplates);
+        const randomKey = keys[Math.floor(Math.random() * keys.length)];
+        return PageTemplates[randomKey];
     }
 }
