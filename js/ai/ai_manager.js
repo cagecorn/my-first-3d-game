@@ -5,11 +5,11 @@ import { SYSTEM_PROMPT } from './config/system.js';
 export class AIManager {
     constructor() {
         this.apiKey = null;
-        this.model = "gemini-1.5-flash";
+        this.model = "gemini-1.5-flash-latest";
     }
 
     setApiKey(key) {
-        this.apiKey = key;
+        this.apiKey = key ? key.trim() : null;
     }
 
     async generateStoryFromProcedural(pageData) {
@@ -57,7 +57,8 @@ Do not use markdown. Do not add commentary. Just the story text.
         `;
 
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`, {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -73,6 +74,7 @@ Do not use markdown. Do not add commentary. Just the story text.
 
             if (!response.ok) {
                 console.error("AI API Error:", response.status, response.statusText);
+                console.error("Endpoint:", `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`);
                 return "The mist obscures your vision... (AI Error)";
             }
 
