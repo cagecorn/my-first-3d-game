@@ -6,6 +6,7 @@ import { Character } from './character.js';
 import { AIManager } from './ai/ai_manager.js';
 import { MBTI_PRESETS } from './data/mbti_presets.js';
 import { ItemFactory } from './item.js';
+import { CombatManager } from './combat.js';
 
 class GameApp {
     constructor() {
@@ -17,6 +18,7 @@ class GameApp {
         this.aiManager = new AIManager();
         this.book = new Book(this.aiManager);
         this.party = new Party();
+        this.combatManager = null;
 
         // State
         this.currentPage = null;
@@ -95,13 +97,10 @@ class GameApp {
 
         this.phaserGame = new Phaser.Game(config);
 
-        // Listen for events from Phaser
+        // Listen for events from Phaser if needed
         this.phaserGame.events.on('log-text', (text, type) => {
             this.ui.log(text, type);
         });
-
-        // Wait for scene to be ready before sending data?
-        // We can use scene.start data passing
 
         this.ui.log("Visual engine initialized.");
     }
@@ -272,14 +271,58 @@ class GameApp {
         if (choice.action === 'nextPage') {
             this.handleTurnPage();
         } else if (choice.action === 'startCombat') {
-            this.ui.log("Combat Started! (Placeholder)");
-            // Here we would interact with Phaser BattleScene
-            // For now, let's just simulate end of combat and next page
-            setTimeout(() => {
-                this.ui.log("Victory!");
-                this.awardLoot(); // Award loot on victory
-                this.handleTurnPage();
-            }, 2000);
+            this.ui.log("Combat Started! Enemies approaching...");
+
+            // Get BattleScene
+            // We assume the scene is active or at least created.
+            // Safe way is to get from game instance if available.
+            if (!this.phaserGame) {
+                this.ui.log("Error: Visual Engine not ready.");
+                return;
+            }
+
+            const battleScene = this.phaserGame.scene.getScene('BattleScene');
+            if (!battleScene) {
+                 this.ui.log("Error: Battle Scene not found.");
+                 return;
+            }
+
+            // Create Combat Manager
+            this.combatManager = new CombatManager(this.party, (type, data) => {
+                switch(type) {
+                    case 'combat_start':
+                        battleScene.setupCombat(data.party, data.enemies);
+                        break;
+                    case 'combat_update':
+                        battleScene.updateVisuals(data.updates);
+                        break;
+                    case 'action':
+                        if (data.type === 'attack') {
+                            this.ui.log(`⚔️ <b>${data.attacker.name}</b> attacks <b>${data.target.name}</b> for ${data.damage}!`, 'combat');
+                            battleScene.playAttackAnimation(data.attacker, data.target, data.damage);
+                        }
+                        break;
+                    case 'death':
+                        this.ui.log(`💀 <b>${data.target.name}</b> collapses!`, 'combat');
+                        battleScene.handleDeath(data.target);
+                        break;
+                    case 'combat_end':
+                        if (data.isWin) {
+                            this.ui.log("<b>VICTORY!</b> The enemies are defeated.");
+                            this.awardLoot();
+                            this.handleTurnPage();
+                        } else {
+                            this.ui.log("<b>DEFEAT...</b> The party falls.");
+                            // Handle game over logic?
+                        }
+                        this.combatManager = null;
+                        break;
+                }
+            });
+
+            // Start
+            this.combatManager.startCombat(this.party.getAverageLevel(), "Shadow");
+
         } else if (choice.action === 'rest') {
             this.party.members.forEach(m => m.heal(20));
             this.ui.log("Party rested and recovered HP.");
@@ -314,14 +357,6 @@ class GameApp {
     handleFeedback(charName, value) {
         const member = this.party.members.find(m => m.name === charName);
         if (member) {
-            // Reinforce current dominant trait or just boost E/S/T/J arbitrarily?
-            // The prompt says: "Identifies the dominant MBTI trait of that action... and Increases that stat value"
-            // Since we don't know exactly *which* trait caused the AI to say that (without complex tracing),
-            // we can simplify:
-            // If Approved, strengthen the strongest deviation.
-            // If Disapproved, weaken it.
-
-            // Find strongest deviation
             const stats = ['E', 'S', 'T', 'J'];
             let maxVal = 0;
             let dominantStat = 'E';
@@ -333,14 +368,8 @@ class GameApp {
                 }
             });
 
-            // Apply change
-            // If Approve (+2): Increase magnitude of dominant trait (Make them MORE of what they are)
-            // If Disapprove (-2): Decrease magnitude (Make them LESS of what they are)
-            // Wait, if maxVal is negative (e.g. Introverted -80), increasing magnitude means going to -82.
-            // So we add (sign * value).
-
             const sign = Math.sign(maxVal) || 1;
-            const change = value * sign; // If value is +2, change is +2 * sign. If -80, becomes -82. Correct.
+            const change = value * sign;
 
             member.adjustMBTI(dominantStat, change);
             this.ui.log(`${member.name}'s personality shifted. (${dominantStat} ${change > 0 ? 'reinforced' : 'weakened'})`, 'normal');
