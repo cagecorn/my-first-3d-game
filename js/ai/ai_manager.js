@@ -5,32 +5,55 @@ import { SYSTEM_PROMPT } from './config/system.js';
 export class AIManager {
     constructor() {
         this.apiKey = null;
-        this.model = "gemini-1.5-flash"; // Or flash-8b if available for speed
+        this.model = "gemini-1.5-flash";
     }
 
     setApiKey(key) {
         this.apiKey = key;
     }
 
-    async generateStory(template, keywords) {
+    async generateStoryFromProcedural(pageData) {
         if (!this.apiKey) {
             console.warn("No API Key provided, returning fallback text.");
-            return this._generateFallbackText(template, keywords);
+            return `You arrive at ${pageData.fullName}. Keywords: ${pageData.keywords.join(", ")}`;
         }
 
-        let prompt = template.prompt;
+        // Narrative Weight System (Dynamic Verbosity)
+        const weight = pageData.totalWeight;
+        let verbosityInstruction = "";
 
-        // Replace placeholders with keywords
-        for (const [key, value] of Object.entries(keywords)) {
-            prompt = prompt.replace(`{${key}}`, value);
+        if (weight < 20) {
+            verbosityInstruction = "Describe briefly in 1 sentence. Dry tone.";
+        } else if (weight >= 20 && weight <= 50) {
+            verbosityInstruction = "Describe in 2-3 sentences. Standard adventure tone.";
+        } else {
+            verbosityInstruction = "Describe lavishly with sensory details. Epic and dramatic tone. No length limit.";
         }
 
-        const fullPrompt = `
+        const prompt = `
+Describe a scene based on these keywords: [${pageData.keywords.join(", ")}].
+The location is called "${pageData.fullName}".
+Make it sound dangerous but tempting.
+${verbosityInstruction}
+`;
+
+        return this._callGemini(prompt);
+    }
+
+    async generateStory(template, keywords) {
+        // Deprecated or fallback for old code
+        return this.generateStoryFromProcedural({
+            fullName: "Unknown Place",
+            keywords: Object.values(keywords),
+            totalWeight: 25 // Default to Mid
+        });
+    }
+
+    async _callGemini(userPrompt) {
+         const fullPrompt = `
 You are the Dungeon Master of a dark fantasy RPG.
-Generate a short, atmospheric description (2-3 sentences) based on the following prompt.
+${userPrompt}
 Do not use markdown. Do not add commentary. Just the story text.
-
-Prompt: ${prompt}
         `;
 
         try {
@@ -50,7 +73,7 @@ Prompt: ${prompt}
 
             if (!response.ok) {
                 console.error("AI API Error:", response.status, response.statusText);
-                return this._generateFallbackText(template, keywords);
+                return "The mist obscures your vision... (AI Error)";
             }
 
             const data = await response.json();
@@ -59,58 +82,24 @@ Prompt: ${prompt}
 
         } catch (e) {
             console.error("AI Generation failed:", e);
-            return this._generateFallbackText(template, keywords);
+            return "The mist obscures your vision... (Network Error)";
         }
-    }
-
-    _generateFallbackText(template, keywords) {
-        // Simple fallback if API fails
-        let text = template.prompt;
-        for (const [key, value] of Object.entries(keywords)) {
-            text = text.replace(`{${key}}`, value);
-        }
-        return text + " (AI Connection Failed)";
     }
 
     async generatePartyReaction(partyMembers, pageEvent) {
         if (!this.apiKey) {
             return [];
         }
-
-        // Context Building
         const context = this._buildContext(partyMembers, pageEvent);
+        const resultText = await this._callGemini(context);
 
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: context
-                        }]
-                    }]
-                })
-            });
-
-            if (!response.ok) {
-                console.error("AI API Error:", response.status, response.statusText);
-                return null;
-            }
-
-            const data = await response.json();
-            const textResult = data.candidates[0].content.parts[0].text;
-
-            // Clean up Markdown code blocks if present
-            const jsonStr = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
-
+             // Clean up Markdown code blocks if present
+            const jsonStr = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(jsonStr);
-
-        } catch (e) {
-            console.error("AI Generation failed:", e);
-            return null;
+        } catch(e) {
+            console.error("Failed to parse party reaction JSON", e);
+            return [];
         }
     }
 
