@@ -5,7 +5,7 @@ import { SYSTEM_PROMPT } from './config/system.js';
 export class AIManager {
     constructor() {
         this.apiKey = null;
-        this.model = "gemini-1.5-flash";
+        this.model = "gemini-1.5-flash-001";
     }
 
     setApiKey(key) {
