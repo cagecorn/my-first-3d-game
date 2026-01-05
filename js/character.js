@@ -76,6 +76,32 @@ export class Character {
         }
     }
 
+    equipItem(item) {
+        if (!item) return null;
+
+        let oldItem = null;
+        if (item.type === 'weapon') {
+            oldItem = this.equipment.weapon;
+            this.equipment.weapon = item;
+        } else if (item.type === 'armor') {
+            oldItem = this.equipment.armor;
+            this.equipment.armor = item;
+        }
+
+        this.recalculateStats();
+        return oldItem;
+    }
+
+    unequipItem(slot) {
+        let oldItem = null;
+        if (this.equipment[slot]) {
+            oldItem = this.equipment[slot];
+            this.equipment[slot] = null;
+            this.recalculateStats();
+        }
+        return oldItem;
+    }
+
     takeDamage(amount) {
         const damage = Math.max(1, amount - this.def);
         this.hp = Math.max(0, this.hp - damage);
