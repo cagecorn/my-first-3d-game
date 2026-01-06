@@ -90,6 +90,25 @@ Output Language: Korean (Natural webtoon style)
         });
     }
 
+    async generateEventNarrative(tags) {
+        if (!this.apiKey) {
+            console.warn("No API Key provided, returning fallback text.");
+            return "The mist swirls... (No API Key)";
+        }
+
+        const prompt = `
+Input (from JS Engine):
+\`\`\`json
+${JSON.stringify(tags, null, 2)}
+\`\`\`
+
+Generate a narrative description based on these tags.
+Language: Korean (Web Novel Style)
+`;
+
+        return await this._callGemini(prompt);
+    }
+
     async generateCombatCommentary(eventData) {
         if (!this.apiKey) return "Combat intensifies...";
 

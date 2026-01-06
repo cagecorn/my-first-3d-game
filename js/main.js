@@ -8,6 +8,16 @@ import { CHARACTER_PRESETS } from './data/character_presets.js';
 import { ItemFactory } from './item.js';
 import { CombatManager } from './combat.js';
 import { Blackboard } from './blackboard.js';
+import { Unit } from './unit_placeholder.js'; // Placeholder if needed, but we use Character
+
+// [Game State Definitions]
+const GAME_STATE = {
+    PAGE_SELECT: 'Page_Select',
+    EXPLORE: 'Explore',
+    COMBAT: 'Combat',
+    LIBIDO_EVENT: 'Libido_Scene',
+    GAME_OVER: 'Game_Over'
+};
 
 class GameApp {
     constructor() {
@@ -24,6 +34,7 @@ class GameApp {
 
         // State
         this.currentPage = null;
+        this.state = GAME_STATE.PAGE_SELECT;
 
         this.init();
     }
@@ -108,28 +119,62 @@ class GameApp {
         this.ui.log("Visual engine initialized.");
     }
 
-    async handleTurnPage() {
+    // [1. Page Generation & Entry]
+    async enterNextPage(forcedType = null) {
         this.ui.log("You turn the page...", 'normal');
 
-        // 1. Generate Page
+        // Check for Forced Events (Interrupts)
+        const forcedEvent = forcedType || this.checkForceEvents();
+        if (forcedEvent) {
+             if (forcedEvent === GAME_STATE.LIBIDO_EVENT) {
+                 this.state = GAME_STATE.LIBIDO_EVENT;
+                 await this.triggerLibidoScene();
+                 return;
+             }
+        }
+
+        // Standard Page Generation
         try {
             this.currentPage = await this.book.generateNextPage();
 
-            // 2. Log Story
+            // Log Story
             this.ui.log(`<h3>${this.currentPage.title}</h3>`, 'normal');
             this.ui.log(this.currentPage.description, 'normal');
 
-            // 3. Render Choices / Start Voting Logic
+            // Map Book Type to Game State
+            if (this.currentPage.type === 'battle' || this.currentPage.type === 'boss') {
+                // Combat is triggered via "Fight" choice usually, but we can set state context
+                this.state = GAME_STATE.PAGE_SELECT;
+            } else if (this.currentPage.type === 'rest') {
+                // Rest logic handles state transition on choice
+                this.state = GAME_STATE.PAGE_SELECT;
+            } else {
+                this.state = GAME_STATE.EXPLORE;
+            }
+
+            // Render Choices
             if (this.currentPage.choices && this.currentPage.choices.length > 0) {
                  this.renderVotingUI();
-            } else {
-                // No choices? Maybe automatic next page or just text
             }
 
         } catch (e) {
             console.error(e);
             this.ui.log("The pages are stuck together... (Error generating page)");
         }
+    }
+
+    // Alias for legacy calls
+    async handleTurnPage() {
+        return this.enterNextPage();
+    }
+
+    checkForceEvents() {
+        // High Libido Check -> Force Libido Scene
+        const highLibidoMember = this.party.members.find(m => m.hilbertSpace.libidoLevel >= 90);
+        if (highLibidoMember) {
+            return GAME_STATE.LIBIDO_EVENT;
+        }
+        return null;
     }
 
     renderVotingUI() {
@@ -262,90 +307,184 @@ class GameApp {
         }
     }
 
-    executeChoice(choice) {
+    async executeChoice(choice) {
         this.ui.log(`> Executing: ${choice.text}`);
 
         if (choice.action === 'nextPage') {
-            this.handleTurnPage();
+            this.enterNextPage();
         } else if (choice.action === 'startCombat') {
-            this.ui.log("Combat Started! Enemies approaching...");
-
-            // Get BattleScene
-            // We assume the scene is active or at least created.
-            // Safe way is to get from game instance if available.
-            if (!this.phaserGame) {
-                this.ui.log("Error: Visual Engine not ready.");
-                return;
-            }
-
-            const battleScene = this.phaserGame.scene.getScene('BattleScene');
-            if (!battleScene) {
-                 this.ui.log("Error: Battle Scene not found.");
-                 return;
-            }
-
-            // Create Combat Manager
-            this.combatManager = new CombatManager(this.party, async (type, data) => {
-                switch(type) {
-                    case 'combat_start':
-                        battleScene.setupCombat(data.party, data.enemies);
-                        break;
-                    case 'combat_update':
-                        battleScene.updateVisuals(data.updates);
-                        break;
-                    case 'action':
-                        if (data.type === 'attack') {
-                            this.ui.log(`⚔️ <b>${data.attacker.name}</b> attacks <b>${data.target.name}</b> for ${data.damage}!`, 'combat');
-                            battleScene.playAttackAnimation(data.attacker, data.target, data.damage);
-                        } else if (data.type === 'heal') {
-                            this.ui.log(`💚 <b>${data.attacker.name}</b> heals <b>${data.target.name}</b> for ${data.amount}!`, 'combat');
-                        }
-                        break;
-                    case 'narrative_event':
-                        // Pause combat and generate AI commentary
-                        if (this.combatManager) this.combatManager.pause();
-
-                        try {
-                            const commentary = await this.aiManager.generateCombatCommentary(data);
-                            this.ui.log(`<div class="p-2 my-2 bg-gray-800 text-gray-200 border-l-4 border-purple-500 italic text-sm">${commentary}</div>`, 'normal');
-                        } catch (e) {
-                            console.error("Narrative generation failed", e);
-                        }
-
-                        if (this.combatManager) this.combatManager.resume();
-                        break;
-                    case 'death':
-                        this.ui.log(`💀 <b>${data.target.name}</b> collapses!`, 'combat');
-                        battleScene.handleDeath(data.target);
-                        break;
-                    case 'combat_end':
-                        if (data.isWin) {
-                            this.ui.log("<b>VICTORY!</b> The enemies are defeated.");
-                            this.awardLoot();
-                            this.handleTurnPage();
-                        } else {
-                            this.ui.log("<b>DEFEAT...</b> The party falls.");
-                            // Handle game over logic?
-                        }
-                        this.combatManager = null;
-                        break;
-                }
-            });
-
-            // Start with Modifiers
-            this.combatManager.startCombat(this.party.getAverageLevel(), this.currentPage.modifiers);
-
+            this.state = GAME_STATE.COMBAT;
+            await this.setupCombat();
         } else if (choice.action === 'rest') {
+            // Trigger Rest Event Logic
+            this.state = GAME_STATE.EXPLORE; // Rest is explore type
+            await this.triggerRestEvent();
+
+            // Then actual mechanic
             this.party.members.forEach(m => m.heal(20));
-            this.ui.log("Party rested and recovered HP.");
-            this.handleTurnPage();
+            this.ui.log("System: Party recovered 20 HP.");
+
+            // Add "Next Page" button manually since we consumed the choice
+            this.renderNextPageButton();
+
         } else if (choice.action === 'openChest') {
             this.awardLoot();
-            this.handleTurnPage();
+            this.renderNextPageButton();
         } else {
              // Default fallthrough
-             this.handleTurnPage();
+             this.enterNextPage();
         }
+    }
+
+    renderNextPageButton() {
+        const div = document.createElement('div');
+        div.className = "mt-4";
+        const btn = document.createElement('button');
+        btn.className = "w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-500";
+        btn.innerText = "Continue Journey";
+        btn.onclick = () => {
+            div.remove();
+            this.enterNextPage();
+        };
+        div.appendChild(btn);
+        this.ui.logElement.appendChild(div);
+        this.ui.scrollToBottom();
+    }
+
+    // [2. Combat Logic]
+    async setupCombat() {
+        this.ui.log("Combat Started! Enemies approaching...");
+
+        if (!this.phaserGame) {
+            this.ui.log("Error: Visual Engine not ready.");
+            return;
+        }
+
+        const battleScene = this.phaserGame.scene.getScene('BattleScene');
+        if (!battleScene) {
+                this.ui.log("Error: Battle Scene not found.");
+                return;
+        }
+
+        // Create Combat Manager
+        this.combatManager = new CombatManager(this.party, async (type, data) => {
+            switch(type) {
+                case 'combat_start':
+                    battleScene.setupCombat(data.party, data.enemies);
+
+                    // AI Intro for Combat
+                    const introTags = {
+                        Context: "Battle_Start",
+                        Enemies: data.enemies.map(e => e.name),
+                        Atmosphere: "Dark_Dungeon" // Could be dynamic from Blackboard
+                    };
+                    try {
+                        const intro = await this.aiManager.generateEventNarrative(introTags);
+                        this.ui.log(`<div class="p-2 my-2 text-gray-400 italic text-sm">${intro}</div>`, 'normal');
+                    } catch(e) {}
+                    break;
+
+                case 'combat_update':
+                    battleScene.updateVisuals(data.updates);
+                    break;
+                case 'action':
+                    if (data.type === 'attack') {
+                        this.ui.log(`⚔️ <b>${data.attacker.name}</b> attacks <b>${data.target.name}</b> for ${data.damage}!`, 'combat');
+                        battleScene.playAttackAnimation(data.attacker, data.target, data.damage);
+                    } else if (data.type === 'heal') {
+                        this.ui.log(`💚 <b>${data.attacker.name}</b> heals <b>${data.target.name}</b> for ${data.amount}!`, 'combat');
+                    }
+                    break;
+                case 'narrative_event':
+                    // Pause combat and generate AI commentary
+                    if (this.combatManager) this.combatManager.pause();
+
+                    try {
+                        const commentary = await this.aiManager.generateCombatCommentary(data);
+                        this.ui.log(`<div class="p-2 my-2 bg-gray-800 text-gray-200 border-l-4 border-purple-500 italic text-sm">${commentary}</div>`, 'normal');
+                    } catch (e) {
+                        console.error("Narrative generation failed", e);
+                    }
+
+                    if (this.combatManager) this.combatManager.resume();
+                    break;
+                case 'death':
+                    this.ui.log(`💀 <b>${data.target.name}</b> collapses!`, 'combat');
+                    battleScene.handleDeath(data.target);
+                    break;
+                case 'combat_end':
+                    if (data.isWin) {
+                        this.ui.log("<b>VICTORY!</b> The enemies are defeated.");
+                        this.awardLoot();
+                        this.renderNextPageButton();
+                    } else {
+                        this.ui.log("<b>DEFEAT...</b> The party falls.");
+                        this.state = GAME_STATE.GAME_OVER;
+                    }
+                    this.combatManager = null;
+                    break;
+            }
+        });
+
+        // Start with Modifiers
+        this.combatManager.startCombat(this.party.getAverageLevel(), this.currentPage.modifiers);
+    }
+
+    // [3. Random Event Logic]
+    async triggerRandomEvent() {
+        // Example implementation if we had pure random events separate from Book
+        // For now, Book handles generation, but this function can handle the Narrative part specifically
+    }
+
+    // [4. Rest Event Logic]
+    async triggerRestEvent() {
+        const mood = this.calculatePartyMood();
+        const restTags = {
+            Type: "Campfire",
+            Topics: ["Recovery", "Relationship_Check"],
+            Party_Mood: mood,
+            Party_Status: this.getPartyStatusSummary()
+        };
+
+        this.ui.log(`<i>Atmosphere: ${mood}...</i>`);
+        const narrative = await this.aiManager.generateEventNarrative(restTags);
+        this.ui.log(`<div class="p-3 bg-gray-100 border rounded my-2">${narrative}</div>`, 'normal');
+    }
+
+    // [5. Libido Scene Logic]
+    async triggerLibidoScene() {
+        const target = this.party.members.find(u => u.hilbertSpace.libidoLevel >= 90) || this.party.members[0];
+
+        const sceneTags = {
+            Type: "Erotic_Scene",
+            Actor: target.name,
+            Trigger: "High_Libido",
+            Visual_Focus: ["Sweat", "Muscle", "Submission"],
+            Mode: "Director_Cut",
+            Context: `${target.name} is overwhelmed by heat.`
+        };
+
+        this.ui.log(`<h3>Warning: Libido Event</h3>`, 'normal');
+        this.ui.log(`<div class="p-3 bg-pink-50 border border-pink-200 rounded my-2 text-pink-900 font-serif">Generating Scene...</div>`, 'normal');
+
+        const narrative = await this.aiManager.generateEventNarrative(sceneTags);
+        this.ui.log(`<div class="p-4 bg-pink-50 border-l-4 border-pink-500 my-2 text-gray-800">${narrative}</div>`, 'normal');
+
+        // Reduce Libido after event
+        target.hilbertSpace.libidoLevel = Math.max(0, target.hilbertSpace.libidoLevel - 50);
+
+        // Continue button
+        this.renderNextPageButton();
+    }
+
+    getPartyStatusSummary() {
+        return this.party.members.map(u => `${u.name}(HP:${u.hp}, Lib:${u.hilbertSpace.libidoLevel})`).join(", ");
+    }
+
+    calculatePartyMood() {
+        const totalLibido = this.party.members.reduce((sum, u) => sum + u.hilbertSpace.libidoLevel, 0);
+        if (totalLibido > 150) return "Sexual_Tension";
+        return "Calm";
     }
 
     awardLoot() {
