@@ -90,6 +90,29 @@ Output Language: Korean (Natural webtoon style)
         });
     }
 
+    async generateCombatCommentary(eventData) {
+        if (!this.apiKey) return "Combat intensifies...";
+
+        const { triggerType, attacker, target, damage } = eventData;
+
+        let promptType = "";
+        if (triggerType === 'KILL') promptType = "Describe a brutal finishing move.";
+        else if (triggerType === 'CRIT') promptType = "Describe a powerful critical hit with flair.";
+        else if (triggerType === 'CRISIS') promptType = `Describe ${target.name} struggling to stay standing, bleeding heavily.`;
+
+        const prompt = `
+        Context: A fantasy battle.
+        Action: ${attacker.name} used an attack on ${target.name}. Damage: ${damage}.
+        Trigger: ${triggerType}.
+
+        Instruction: ${promptType}
+        Keep it very short (1 sentence). Dynamic and visceral.
+        Output Language: Korean.
+        `;
+
+        return await this._callGemini(prompt);
+    }
+
     async _callGemini(userPrompt) {
          const fullPrompt = `
 You are the Dungeon Master of a dark fantasy RPG.

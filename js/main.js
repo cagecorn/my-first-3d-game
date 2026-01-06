@@ -293,7 +293,7 @@ class GameApp {
             }
 
             // Create Combat Manager
-            this.combatManager = new CombatManager(this.party, (type, data) => {
+            this.combatManager = new CombatManager(this.party, async (type, data) => {
                 switch(type) {
                     case 'combat_start':
                         battleScene.setupCombat(data.party, data.enemies);
@@ -306,6 +306,19 @@ class GameApp {
                             this.ui.log(`⚔️ <b>${data.attacker.name}</b> attacks <b>${data.target.name}</b> for ${data.damage}!`, 'combat');
                             battleScene.playAttackAnimation(data.attacker, data.target, data.damage);
                         }
+                        break;
+                    case 'narrative_event':
+                        // Pause combat and generate AI commentary
+                        if (this.combatManager) this.combatManager.pause();
+
+                        try {
+                            const commentary = await this.aiManager.generateCombatCommentary(data);
+                            this.ui.log(`<div class="p-2 my-2 bg-gray-800 text-gray-200 border-l-4 border-purple-500 italic text-sm">${commentary}</div>`, 'normal');
+                        } catch (e) {
+                            console.error("Narrative generation failed", e);
+                        }
+
+                        if (this.combatManager) this.combatManager.resume();
                         break;
                     case 'death':
                         this.ui.log(`💀 <b>${data.target.name}</b> collapses!`, 'combat');
@@ -325,8 +338,8 @@ class GameApp {
                 }
             });
 
-            // Start
-            this.combatManager.startCombat(this.party.getAverageLevel(), "Shadow");
+            // Start with Modifiers
+            this.combatManager.startCombat(this.party.getAverageLevel(), this.currentPage.modifiers);
 
         } else if (choice.action === 'rest') {
             this.party.members.forEach(m => m.heal(20));
