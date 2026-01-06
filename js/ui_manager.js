@@ -51,6 +51,15 @@ export class UIManager {
         this.setupLayer.style.display = 'flex';
     }
 
+    // Toggle Glitch Effect
+    toggleGlitch(active) {
+        if (active) {
+            document.body.classList.add('glitch-effect');
+        } else {
+            document.body.classList.remove('glitch-effect');
+        }
+    }
+
     // Add text to the Right Page log
     log(text, type = 'normal', character = null) {
         const p = document.createElement('div');

@@ -114,3 +114,28 @@ body {
     font-family: inherit;
 }
 #user-input:focus { outline: none; background: #222; }
+
+/* Messiah Glitch Effect */
+.glitch-effect {
+    animation: glitch-anim 2s infinite;
+    filter: contrast(120%) hue-rotate(90deg);
+}
+
+@keyframes glitch-anim {
+    0% { filter: hue-rotate(0deg); transform: translate(0, 0); }
+    10% { filter: hue-rotate(90deg); transform: translate(-2px, 2px); }
+    20% { filter: hue-rotate(0deg); transform: translate(2px, -2px); }
+    30% { filter: invert(0.2); transform: translate(0, 0); }
+    100% { filter: hue-rotate(0deg); transform: translate(0, 0); }
+}
+
+/* Chat Overlay Modes */
+.chat-overlay-rest {
+    border-color: #ff8c00 !important; /* Warm Orange */
+    background: rgba(20, 10, 5, 0.95) !important;
+}
+
+.chat-overlay-libido {
+    border-color: #8b0000 !important; /* Deep Crimson */
+    background: rgba(20, 0, 0, 0.95) !important;
+}
