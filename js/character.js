@@ -35,6 +35,7 @@ export class Character {
         this.hp = 0;
         this.maxMp = 0;
         this.mp = 0;
+        this.stamina = 100; // New: Physical/Mental energy for aesthetic logic
         this.atk = 0;
         this.def = 0;
         this.spd = 0;
@@ -241,13 +242,112 @@ export class Character {
         return this.memory_tags[category] && this.memory_tags[category].includes(tag);
     }
 
+    // --- JS Translator 1.0 : Logic to Tags ---
+    getNarrativeTags(targetId = null) {
+        let tags = [];
+        let instructions = [];
+
+        // 1. MBTI Spectrum
+        const { EI_Val, SN_Val, TF_Val } = this.mbtiDynamic;
+
+        // I > 80 (Extreme Introversion/Vigilance) -> EI_Val < 20
+        if (EI_Val < 20) {
+             tags.push("Extreme_Vigilance", "Weapon_Grip");
+             instructions.push("Action: Silent, gripping weapon. Eyes full of vigilance.");
+        }
+
+        // S > 80 (Extreme Sensing) -> SN_Val > 80
+        if (SN_Val > 80) {
+             tags.push("Hyper_Detail", "Olfactory_Tactile");
+             instructions.push("Focus: Physical observation (sweat smell, sound of armor).");
+        }
+
+        // N > 80 (Extreme Intuition) -> SN_Val < 20
+        if (SN_Val < 20) {
+             tags.push("Omen_Reading", "Abstract_Dread");
+             instructions.push("Focus: Ominous atmosphere, premonition of death.");
+        }
+
+        // T > 70 (Thinking) -> TF_Val > 70
+        if (TF_Val > 70) {
+             tags.push("Calm_Analysis");
+             instructions.push("Tone: Dry, Cynical. Analyze situation with numbers/efficiency.");
+        }
+
+        // F > 70 (Feeling) -> TF_Val < 30
+        if (TF_Val < 30) {
+             tags.push("Visceral_Pain");
+             instructions.push("Tone: Desperate. React as if your own flesh is torn.");
+        }
+
+        // 2. Libido & Mental
+        const { libidoLevel, sanity } = this.hilbertSpace;
+
+        if (libidoLevel < 30) {
+             tags.push("Ascetic_Knight");
+             instructions.push("Breath: Steady. Stoic posture.");
+        } else if (libidoLevel >= 31 && libidoLevel <= 70) {
+             tags.push("Suppressed_Heat");
+             instructions.push("Breath: Heavy. Feeling hot inside armor.");
+        } else if (libidoLevel > 90) {
+             tags.push("Rut_Mode", "Non_Consensual_Touch");
+             instructions.push("State: Beast-like. Panting. Dilated pupils.");
+        }
+
+        if (sanity < 20) {
+             tags.push("Beautiful_Madness", "Hysterical_Laugh");
+             instructions.push("Laugh: Hysterical. Finds gore beautiful.");
+        }
+
+        // 3. Aesthetic / Combat
+        // Stamina < 40
+        if (this.stamina < 40) {
+             tags.push("Oiled_Sweat", "Bulging_Veins");
+             instructions.push("Visual: Sweat glistening on skin. Veins popping.");
+        }
+
+        // Armor Durability (Simulated with HP or Equipment check)
+        const armor = this.equipment.armor;
+        if (armor && armor.durability !== undefined && armor.durability < 50) {
+             tags.push("Partial_Nudity", "Anatomy_Study");
+             instructions.push("Visual: Broken armor revealing muscles. Artistic nudity.");
+        } else if (this.hp < (this.maxHp * 0.5)) {
+             // Fallback if no specific durability tracking
+             tags.push("Battle_Damaged", "Anatomy_Focus");
+             instructions.push("Visual: Wounds and damaged gear revealing anatomy.");
+        }
+
+        // 4. Relationships (Power & Jealousy)
+        if (targetId && this.hilbertSpace.relationships[targetId]) {
+             const rel = this.hilbertSpace.relationships[targetId];
+
+             if (rel.dominance > 80) {
+                  tags.push("Master_Slave", "Command_Action");
+                  instructions.push("Dynamic: Assertive, commanding. Chin lifting.");
+             }
+
+             if (rel.jealousy > 80) {
+                  tags.push("Possessive", "Intervention");
+                  instructions.push("Action: Intervene. Force attention on self.");
+             }
+        }
+
+        return {
+             Tags: tags.join(", "),
+             Instructions: instructions.join(" ")
+        };
+    }
+
     // --- AI Context Manager ("Middle Manager") ---
-    getAIContext(contextType) {
+    getAIContext(contextType, targetId = null) {
         // Base identity is always relevant
         const baseContext = {
             ID: this.id,
             Identity: this.identity
         };
+
+        // Run Logic Translator
+        const narrativeTags = this.getNarrativeTags(targetId);
 
         if (contextType === "COMBAT") {
             return {
@@ -255,23 +355,27 @@ export class Character {
                 Combat_Stats: {
                     HP: `${this.hp}/${this.maxHp}`,
                     MP: `${this.mp}/${this.maxMp}`,
+                    Stamina: this.stamina,
                     Status: this.combatStatus.statusEffects,
                     LimitGauge: this.combatStatus.limitBreakGauge
                 },
                 // Combat behavior is driven by MBTI
-                Behavior_Engine: this.mbtiDynamic
+                Behavior_Engine: this.mbtiDynamic,
+                Narrative_Guidance: narrativeTags
             };
         } else if (contextType === "EVENT" || contextType === "SOCIAL") {
             return {
                 ...baseContext,
                 Personality_State: this.mbtiDynamic,
                 Emotional_Space: this.hilbertSpace,
-                Aesthetic_State: this.aestheticState
+                Aesthetic_State: this.aestheticState,
+                Narrative_Guidance: narrativeTags
             };
         } else if (contextType === "VISUAL" || contextType === "IMAGE_GEN") {
              return {
                 ...baseContext,
-                Aesthetic_State: this.aestheticState
+                Aesthetic_State: this.aestheticState,
+                Visual_Tags: narrativeTags.Tags
              };
         }
 
@@ -281,7 +385,8 @@ export class Character {
             MBTI: this.mbtiDynamic,
             Hilbert: this.hilbertSpace,
             Aesthetic: this.aestheticState,
-            Combat: { HP: this.hp, MP: this.mp }
+            Combat: { HP: this.hp, MP: this.mp, Stamina: this.stamina },
+            Narrative_Guidance: narrativeTags
         };
     }
 
@@ -419,6 +524,14 @@ export class Character {
     takeDamage(amount) {
         const damage = Math.max(1, amount - this.def);
         this.hp = Math.max(0, this.hp - damage);
+
+        // Reduce Stamina on hit (stress)
+        this.stamina = Math.max(0, this.stamina - 5);
+
+        // Reduce Armor Durability if present
+        if (this.equipment.armor && this.equipment.armor.durability !== undefined) {
+            this.equipment.armor.durability = Math.max(0, this.equipment.armor.durability - Math.floor(damage / 2));
+        }
 
         // Aesthetic update: Sweat and Tension increases with damage
         this.aestheticState.sweatGloss = Math.min(10, this.aestheticState.sweatGloss + 1);
