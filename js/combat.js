@@ -36,10 +36,25 @@ export class CombatManager {
     startCombat(difficultyLevel, modifiers = {}) {
         this.generateEnemies(difficultyLevel, modifiers);
 
+        // [NEW] Encounter Dice (D20)
+        const d20 = Math.floor(Math.random() * 20) + 1;
+        let encounterStatus = 'Normal';
+        let initiativeBonus = 0;
+
+        if (d20 === 1) {
+            encounterStatus = 'Ambush'; // Enemies Advantage
+            this.enemies.forEach(e => e.stats.weight -= 20); // Faster enemies
+        } else if (d20 === 20) {
+            encounterStatus = 'Pre-emptive'; // Player Advantage
+            this.party.members.forEach(m => m.stats.weight -= 20); // Faster allies
+        }
+
         // Notify Start
         this.onEvent('combat_start', {
             party: this.party.members,
-            enemies: this.enemies
+            enemies: this.enemies,
+            encounterStatus: encounterStatus,
+            encounterRoll: d20
         });
 
         this.isRunning = true;
@@ -224,6 +239,7 @@ export class CombatManager {
                  target.hilbertSpace.libidoLevel += 5;
                  instinctTag = target.instinct.Name;
                  this.logSystem(`> [Instinct] ${target.name}'s ${instinctTag} triggered!`);
+                 this.onEvent('instinct_trigger', { character: target, instinctName: instinctTag });
             }
         }
 
@@ -238,6 +254,7 @@ export class CombatManager {
              if (actor.instinct && actor.instinct.Trigger === 'On_Kill') {
                   actor.hp += 5; // Heal 5
                   this.logSystem(`> [Instinct] ${actor.name}'s Adrenaline_Junkie triggered! Heals 5 HP.`);
+                  this.onEvent('instinct_trigger', { character: actor, instinctName: actor.instinct.Name });
              }
         }
     }

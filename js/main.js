@@ -403,6 +403,15 @@ class GameApp {
                 case 'combat_start':
                     battleScene.setupCombat(data.party, data.enemies);
 
+                    // Log Encounter Status
+                    if (data.encounterStatus === 'Ambush') {
+                        this.ui.log(`<h3 class="text-red-600">⚠ AMBUSH! (D20: ${data.encounterRoll})</h3>`, 'combat');
+                    } else if (data.encounterStatus === 'Pre-emptive') {
+                        this.ui.log(`<h3 class="text-blue-500">⚡ PRE-EMPTIVE STRIKE! (D20: ${data.encounterRoll})</h3>`, 'combat');
+                    } else {
+                        this.ui.log(`Encounter Roll: ${data.encounterRoll} (Normal)`, 'combat');
+                    }
+
                     // AI Intro for Combat
                     const introTags = {
                         Context: "Battle_Start",
@@ -463,6 +472,18 @@ class GameApp {
                     }
                     this.combatManager = null;
                     break;
+
+                case 'instinct_trigger':
+                    // [NEW] Visual Feedback for Instinct
+                    this.ui.log(`<div class="text-red-600 font-bold border-2 border-red-600 p-1 text-center bg-black animate-pulse">
+                        ⚡ INSTINCT AWAKENED: ${data.instinctName} (${data.character.name})
+                    </div>`, 'combat');
+
+                    // Phaser Shake Effect
+                    if (battleScene && battleScene.cameras && battleScene.cameras.main) {
+                        battleScene.cameras.main.shake(300, 0.02);
+                    }
+                    break;
             }
         });
 
@@ -479,16 +500,51 @@ class GameApp {
     // [4. Rest Event Logic]
     async triggerRestEvent() {
         const mood = this.calculatePartyMood();
-        const restTags = {
-            Type: "Campfire",
-            Topics: ["Recovery", "Relationship_Check"],
-            Party_Mood: mood,
-            Party_Status: this.getPartyStatusSummary()
+        this.ui.log(`<i>Atmosphere: ${mood}...</i>`);
+
+        this.ui.log(`<b>Campfire Action:</b> Who will you tend to?`);
+
+        // Create Interaction Buttons
+        const div = document.createElement('div');
+        div.className = "flex flex-wrap gap-2 my-2";
+
+        this.party.members.forEach(member => {
+            if (!member.isAlive()) return;
+            const btn = document.createElement('button');
+            btn.className = "px-3 py-2 bg-gray-700 text-white rounded text-sm hover:bg-orange-600";
+            btn.innerText = `Tend to ${member.name} (${member.hp}/${member.maxHp} HP)`;
+            btn.onclick = () => {
+                div.remove();
+                this.handleRestInteraction(member, mood);
+            };
+            div.appendChild(btn);
+        });
+
+        this.ui.logElement.appendChild(div);
+        this.ui.scrollToBottom();
+    }
+
+    async handleRestInteraction(target, mood) {
+        // Generate Sensory Description
+        const touchTags = {
+            Type: "Rest_Touch",
+            Actor: target.name,
+            Action: "Wound_Care",
+            Sensory_Focus: ["Muscle_Tremor", "Sweat", "Scars", "Warmth"],
+            Context: `${target.name} is being treated by the Messiah.`
         };
 
-        this.ui.log(`<i>Atmosphere: ${mood}...</i>`);
-        const narrative = await this.aiManager.generateEventNarrative(restTags);
-        this.ui.log(`<div class="p-3 bg-gray-100 border rounded my-2">${narrative}</div>`, 'normal');
+        this.ui.log(`<div class="text-sm text-gray-500">Approaching ${target.name}...</div>`);
+        const narrative = await this.aiManager.generateEventNarrative(touchTags);
+        this.ui.log(`<div class="p-3 bg-orange-50 border-l-4 border-orange-400 my-2 text-gray-800">${narrative}</div>`, 'normal');
+
+        // Apply Healing
+        target.heal(20);
+        target.stamina = Math.min(100, target.stamina + 30);
+        this.ui.log(`System: ${target.name} recovered 20 HP & 30 Stamina.`);
+
+        // Add Next Page Button
+        this.renderNextPageButton();
     }
 
     // [5. Libido Scene Logic]
@@ -497,14 +553,13 @@ class GameApp {
 
         // Open Chat for Libido
         this.openChat('Libido');
-        // Intro handled in prompt logic but we can do it here too
         this.addChatBubble("거친 숨소리가 공간을 메웁니다. 지금이라면... 무슨 말이든 허용될 것 같습니다.", "system");
 
         const sceneTags = {
             Type: "Erotic_Scene",
             Actor: target.name,
             Trigger: "High_Libido",
-            Visual_Focus: ["Sweat", "Muscle", "Submission"],
+            Visual_Focus: ["Sweat", "Muscle_Contraction", "Veins", "Rough_Breath", "Hyper_Realism"],
             Mode: "Director_Cut",
             Context: `${target.name} is overwhelmed by heat.`
         };
@@ -515,16 +570,60 @@ class GameApp {
         const narrative = await this.aiManager.generateEventNarrative(sceneTags);
         this.ui.log(`<div class="p-4 bg-pink-50 border-l-4 border-pink-500 my-2 text-gray-800">${narrative}</div>`, 'normal');
 
-        // Reduce Libido after event
-        target.hilbertSpace.libidoLevel = Math.max(0, target.hilbertSpace.libidoLevel - 50);
+        // Render Choices: Admire/Praise vs Restrain/Reject
+        const div = document.createElement('div');
+        div.className = "flex gap-2 my-2 justify-center";
 
-        // Continue button
+        const btnAdmire = document.createElement('button');
+        btnAdmire.className = "px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-500 shadow-md";
+        btnAdmire.innerText = "1. Admire & Praise (Desire)";
+        btnAdmire.onclick = () => {
+            div.remove();
+            this.handleLibidoChoice(target, 'Admire');
+        };
+
+        const btnReject = document.createElement('button');
+        btnReject.className = "px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 shadow-md";
+        btnReject.innerText = "2. Restrain & Reject (Loyalty)";
+        btnReject.onclick = () => {
+            div.remove();
+            this.handleLibidoChoice(target, 'Reject');
+        };
+
+        div.appendChild(btnAdmire);
+        div.appendChild(btnReject);
+        this.ui.logElement.appendChild(div);
+        this.ui.scrollToBottom();
+    }
+
+    async handleLibidoChoice(target, type) {
+        if (type === 'Admire') {
+            this.ui.log(`<div class="text-pink-800 font-bold">> You gaze deeply at ${target.name}'s trembling form.</div>`);
+            target.hilbertSpace.libidoLevel += 10;
+            // Fanaticism check - increase loyalty/libido
+            target.hilbertSpace.loyaltyMessiah += 5;
+            this.ui.log(`System: ${target.name}'s Fanaticism (Loyalty+Libido) increased.`);
+        } else {
+            this.ui.log(`<div class="text-gray-800 font-bold">> You turn away, demanding restraint.</div>`);
+            target.hilbertSpace.libidoLevel = Math.max(0, target.hilbertSpace.libidoLevel - 30);
+            target.hilbertSpace.loyaltyMessiah += 10;
+            this.ui.log(`System: ${target.name}'s Loyalty increased significantly.`);
+        }
+
+        // Final reduce Libido to reset event state
+        target.hilbertSpace.libidoLevel = Math.max(0, target.hilbertSpace.libidoLevel - 40);
+
         this.renderNextPageButton();
     }
 
     // [6. Messiah Scene Logic] (Stub)
     async triggerMessiahScene() {
+        this.ui.toggleGlitch(true);
         this.ui.log(`<h3>[System Error] Decoding Memory...</h3>`, 'normal');
+
+        // Brief glitch effect for demo purposes (since it's a stub)
+        setTimeout(() => this.ui.toggleGlitch(false), 2000);
+
         // Future Implementation:
         // 1. Load Reality Log
         // 2. Increase SyncRate
@@ -605,8 +704,18 @@ class GameApp {
     // [Chat Engine Methods]
     openChat(mode) {
         this.isChatActive = true;
-        document.getElementById('chat-overlay').classList.remove('hidden');
-        document.getElementById('chat-mode-title').innerText = mode === 'Rest' ? "🔥 CAMPFIRE TALK" : "💋 SECRET WHISPER";
+        const overlay = document.getElementById('chat-overlay');
+        overlay.classList.remove('hidden');
+
+        // Dynamic Styling
+        overlay.classList.remove('chat-overlay-rest', 'chat-overlay-libido');
+        if (mode === 'Rest') {
+            overlay.classList.add('chat-overlay-rest');
+            document.getElementById('chat-mode-title').innerText = "🔥 CAMPFIRE TALK";
+        } else {
+            overlay.classList.add('chat-overlay-libido');
+            document.getElementById('chat-mode-title').innerText = "💋 SECRET WHISPER";
+        }
 
         // Reset Chat with System Msg
         document.getElementById('chat-history').innerHTML = `<div class="chat-msg system">>> 대화 채널이 열렸습니다. 대상에게 말을 거세요.</div>`;
