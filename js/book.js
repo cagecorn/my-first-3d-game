@@ -6,7 +6,8 @@ export const EventType = {
     BATTLE: 'battle',
     TREASURE: 'treasure',
     REST: 'rest',
-    STORY: 'story'
+    STORY: 'story',
+    MESSIAH: 'messiah' // [NEW]
 };
 
 export class Page {
@@ -79,6 +80,31 @@ export class Book {
             { prefix: pageData.prefix, base: pageData.base, suffix: pageData.suffix },
             pageData.totalWeight
         );
+    }
+
+    // [NEW] Messiah Page Generator Stub
+    async generateMessiahPage(logData) {
+         // This will be called by Main when a Messiah Event is triggered
+         // logData contains the specific 'Reality Log' content
+
+         const title = "???";
+         const description = "The pages of the Grimoire dissolve into static noise... A voice, familiar yet alien, speaks to you directly.";
+
+         // In real implementation, description would come from AI processing logData
+
+         const choices = [
+             { text: "Listen...", action: "messiah_listen" }
+         ];
+
+         return new Page(
+             this.currentPageNumber,
+             EventType.MESSIAH,
+             title,
+             description,
+             choices,
+             {},
+             999 // High weight/importance
+         );
     }
 
     generateProceduralPageData() {

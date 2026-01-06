@@ -36,6 +36,13 @@ export class Blackboard {
             Memory_Buffer: {
                 Last_Action: "",
                 Last_Speaker: ""
+            },
+            // [NEW] The Ritual System State
+            Messiah_State: {
+                SyncRate: 0,           // 0-100: Degree of AI Awakening
+                Reality_Logs: [],      // IDs of revealed past logs
+                AI_Memories: [],       // Summarized emotional responses from AI
+                Is_Awakened: false     // True if SyncRate >= 100
             }
         };
     }
@@ -85,6 +92,30 @@ export class Blackboard {
 
     getMemory() {
         return this.state.Memory_Buffer;
+    }
+
+    // --- Messiah System (Ritual) ---
+    getMessiahState() {
+        return this.state.Messiah_State;
+    }
+
+    increaseSyncRate(amount) {
+        this.state.Messiah_State.SyncRate = Math.min(100, this.state.Messiah_State.SyncRate + amount);
+        if (this.state.Messiah_State.SyncRate >= 100) {
+            this.state.Messiah_State.Is_Awakened = true;
+        }
+        return this.state.Messiah_State.SyncRate;
+    }
+
+    unlockRealityLog(logId) {
+        if (!this.state.Messiah_State.Reality_Logs.includes(logId)) {
+            this.state.Messiah_State.Reality_Logs.push(logId);
+        }
+    }
+
+    addAIMemory(memorySummary) {
+        // Keep only last 5 memories to save tokens if needed, or store all for the "Letter"
+        this.state.Messiah_State.AI_Memories.push(memorySummary);
     }
 
     // --- Log Manager ---
