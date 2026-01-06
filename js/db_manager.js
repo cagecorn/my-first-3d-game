@@ -1,6 +1,7 @@
 export const DB_NAME = 'WordDiceDB';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2; // Incremented for Schema Update
 export const STORE_CHARACTERS = 'characters';
+export const STORE_MEMORY_BOX = 'memory_box'; // [NEW] Store for Ending Letters
 
 export class DBManager {
     static openDB() {
@@ -20,6 +21,10 @@ export class DBManager {
                 const db = event.target.result;
                 if (!db.objectStoreNames.contains(STORE_CHARACTERS)) {
                     db.createObjectStore(STORE_CHARACTERS, { keyPath: 'name' });
+                }
+                // [NEW] Create Memory Box Store
+                if (!db.objectStoreNames.contains(STORE_MEMORY_BOX)) {
+                    db.createObjectStore(STORE_MEMORY_BOX, { keyPath: 'id' });
                 }
             };
         });
@@ -67,6 +72,33 @@ export class DBManager {
             const transaction = db.transaction([STORE_CHARACTERS], 'readwrite');
             const store = transaction.objectStore(STORE_CHARACTERS);
             const request = store.delete(name);
+
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- Memory Box (Messiah System) Methods ---
+
+    static async saveEndingLetter(letterData) {
+        // letterData structure: { id: uuid, timestamp: number, content: string, syncRate: number }
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_MEMORY_BOX], 'readwrite');
+            const store = transaction.objectStore(STORE_MEMORY_BOX);
+            const request = store.put(letterData);
+
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async getAllEndingLetters() {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_MEMORY_BOX], 'readonly');
+            const store = transaction.objectStore(STORE_MEMORY_BOX);
+            const request = store.getAll();
 
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
