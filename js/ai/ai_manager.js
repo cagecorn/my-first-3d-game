@@ -3,9 +3,10 @@ import { WORLD_LORE, GAME_RULES } from './config/world.js';
 import { SYSTEM_PROMPT } from './config/system.js';
 
 export class AIManager {
-    constructor() {
+    constructor(blackboard = null) {
         this.apiKey = null;
         this.model = "gemini-2.5-flash";
+        this.blackboard = blackboard;
     }
 
     setApiKey(key) {
@@ -30,7 +31,29 @@ export class AIManager {
             verbosityInstruction = "Describe lavishly with sensory details. Epic and dramatic tone. No length limit.";
         }
 
+        // Blackboard Context Injection
+        let blackboardContext = "";
+        if (this.blackboard) {
+            const global = this.blackboard.getGlobalState();
+            const director = this.blackboard.getDirectorControl();
+
+            blackboardContext = `
+[Director's Note]
+- Current Chapter: ${global.Chapter}
+- Atmosphere: [${global.Atmosphere.join(", ")}]
+- Tone: ${director.Current_Tone} (Adjust style accordingly)
+- Chaos Factor: ${director.Chaos_Factor} (Higher means more random/unexpected details)
+`;
+            if (director.Current_Tone === 'EROTIC') {
+                verbosityInstruction += " Focus on sensual and tactile details.";
+            } else if (director.Current_Tone === 'HORROR') {
+                verbosityInstruction += " Focus on unsettling and creepy details.";
+            }
+        }
+
         const prompt = `
+${blackboardContext}
+
 Describe a scene based on these keywords: [${pageData.keywords.join(", ")}].
 The location is called "${pageData.fullName}".
 Make it sound dangerous but tempting.
@@ -106,6 +129,19 @@ Do not use markdown. Do not add commentary. Just the story text.
     }
 
     _buildContext(partyMembers, pageEvent) {
+        // Blackboard Context
+        let blackboardContext = "";
+        if (this.blackboard) {
+             const global = this.blackboard.getGlobalState();
+             const director = this.blackboard.getDirectorControl();
+             blackboardContext = `
+[World State]
+- Chapter: ${global.Chapter}
+- Tone: ${director.Current_Tone}
+- Chaos: ${director.Chaos_Factor}
+`;
+        }
+
         // Create status summary
         let statusSummary = "현재 파티 상태:\n";
         let memoryTags = "";
@@ -148,6 +184,8 @@ Do not use markdown. Do not add commentary. Just the story text.
 
         return `
 ${SYSTEM_PROMPT}
+
+${blackboardContext}
 
 [세계관]
 ${WORLD_LORE}

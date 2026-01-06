@@ -7,6 +7,7 @@ import { AIManager } from './ai/ai_manager.js';
 import { MBTI_PRESETS } from './data/mbti_presets.js';
 import { ItemFactory } from './item.js';
 import { CombatManager } from './combat.js';
+import { Blackboard } from './blackboard.js';
 
 class GameApp {
     constructor() {
@@ -15,8 +16,9 @@ class GameApp {
         this.apiKey = localStorage.getItem('google_api_key');
 
         // Game Logic
-        this.aiManager = new AIManager();
-        this.book = new Book(this.aiManager);
+        this.blackboard = new Blackboard();
+        this.aiManager = new AIManager(this.blackboard);
+        this.book = new Book(this.aiManager, this.blackboard);
         this.party = new Party();
         this.combatManager = null;
 

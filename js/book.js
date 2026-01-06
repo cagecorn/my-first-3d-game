@@ -22,11 +22,12 @@ export class Page {
 }
 
 export class Book {
-    constructor(aiManager) {
+    constructor(aiManager, blackboard) {
         this.currentPageNumber = 0;
         this.chapter = 1;
         this.dice = new WordDice();
         this.aiManager = aiManager;
+        this.blackboard = blackboard;
     }
 
     async generateNextPage() {
@@ -34,6 +35,19 @@ export class Book {
 
         // 1. Procedural Generation
         const pageData = this.generateProceduralPageData();
+
+        // 1.5 Update Blackboard
+        if (this.blackboard) {
+            this.blackboard.setCurrentPage({
+                Page_ID: this.currentPageNumber,
+                Title: pageData.fullName,
+                Prefix: pageData.prefix ? pageData.prefix.name : "",
+                Suffix: pageData.suffix ? pageData.suffix.name : "",
+                Prefix_Weight: pageData.prefix ? 0.8 : 0.0, // Hardcoded high weight for prefix as requested if present
+                Mission: "Explore", // Could be dynamic
+                Keywords: pageData.keywords
+            });
+        }
 
         // 2. Generate Story via AI
         const storyText = await this.aiManager.generateStoryFromProcedural(pageData);
