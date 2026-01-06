@@ -153,7 +153,7 @@ class GameApp {
             this.ui.log(this.currentPage.description, 'normal');
 
             // [NEW] Party Reactions for Exploration
-            this.triggerPartyReaction({
+            await this.triggerPartyReaction({
                 type: 'PAGE_ARRIVAL',
                 title: this.currentPage.title,
                 description: this.currentPage.description
@@ -170,7 +170,7 @@ class GameApp {
 
                 // Open Chat for Rest
                 this.openChat('Rest');
-                this.aiManager.geminiNarrate("모닥불 타는 소리만 들립니다. 누군가 당신의 말을 기다리는 눈치군요.")
+                await this.aiManager.geminiNarrate("모닥불 타는 소리만 들립니다. 누군가 당신의 말을 기다리는 눈치군요.")
                      .then(text => { if(text) this.ui.log(text); }) // Simple log or specialized logic
                      .catch(() => {});
 
@@ -384,7 +384,20 @@ class GameApp {
 
     // [2. Combat Logic]
     async setupCombat() {
-        this.ui.log("Combat Started! Enemies approaching...");
+        // 1. AI Intro for Combat (Blocking)
+        this.ui.log("Enemies approaching...", 'system');
+
+        const introTags = {
+            Context: "Battle_Start",
+            Location: this.currentPage ? this.currentPage.title : "Unknown",
+            Atmosphere: "Dark_Dungeon"
+        };
+        try {
+            const intro = await this.aiManager.generateEventNarrative(introTags);
+            this.ui.log(`<div class="p-2 my-2 text-gray-400 italic text-sm">${intro}</div>`, 'normal');
+        } catch(e) {}
+
+        this.ui.log("Combat Started!", 'system');
 
         if (!this.phaserGame) {
             this.ui.log("Error: Visual Engine not ready.");
@@ -411,17 +424,6 @@ class GameApp {
                     } else {
                         this.ui.log(`Encounter Roll: ${data.encounterRoll} (Normal)`, 'combat');
                     }
-
-                    // AI Intro for Combat
-                    const introTags = {
-                        Context: "Battle_Start",
-                        Enemies: data.enemies.map(e => e.name),
-                        Atmosphere: "Dark_Dungeon" // Could be dynamic from Blackboard
-                    };
-                    try {
-                        const intro = await this.aiManager.generateEventNarrative(introTags);
-                        this.ui.log(`<div class="p-2 my-2 text-gray-400 italic text-sm">${intro}</div>`, 'normal');
-                    } catch(e) {}
                     break;
 
                 case 'combat_update':
