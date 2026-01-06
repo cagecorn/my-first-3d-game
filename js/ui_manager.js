@@ -65,8 +65,13 @@ export class UIManager {
         const p = document.createElement('div');
         p.className = `log-entry mb-2 ${type === 'combat' ? 'text-red-800 text-sm' : 'text-gray-800'}`;
 
-        // Simple Markdown parsing or just text
-        p.innerHTML = text.replace(/\n/g, '<br>');
+        // Container for text to prevent Typewriter from overwriting buttons
+        const contentSpan = document.createElement('span');
+        p.appendChild(contentSpan);
+
+        // Run Typewriter Effect
+        const formattedText = text.replace(/\n/g, '<br>');
+        this.typewriterEffect(contentSpan, formattedText);
 
         // If character provided (AI dialogue), add Approve/Disapprove buttons
         if (character && type === 'normal') { // Assuming normal log is used for dialogue
@@ -100,6 +105,42 @@ export class UIManager {
 
         this.logElement.appendChild(p);
         this.scrollToBottom();
+    }
+
+    typewriterEffect(element, text, speed = 20) {
+        // Regex to split by HTML tags (matches <...> as a token)
+        const tokens = text.split(/(<[^>]+>)/g).filter(t => t);
+
+        let tokenIndex = 0;
+        let charIndex = 0;
+
+        const type = () => {
+            if (tokenIndex >= tokens.length) return;
+
+            const token = tokens[tokenIndex];
+
+            if (token.startsWith('<') && token.endsWith('>')) {
+                // It's a tag, append instantly
+                element.innerHTML += token;
+                tokenIndex++;
+                type(); // Immediate next token
+            } else {
+                // It's text
+                if (charIndex < token.length) {
+                    element.innerHTML += token.charAt(charIndex);
+                    charIndex++;
+                    this.scrollToBottom();
+                    setTimeout(type, speed);
+                } else {
+                    // Text token finished
+                    tokenIndex++;
+                    charIndex = 0;
+                    setTimeout(type, speed);
+                }
+            }
+        };
+
+        type();
     }
 
     scrollToBottom() {
