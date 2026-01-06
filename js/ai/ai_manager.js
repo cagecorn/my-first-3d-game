@@ -5,7 +5,7 @@ import { SYSTEM_PROMPT } from './config/system.js';
 export class AIManager {
     constructor(blackboard = null) {
         this.apiKey = null;
-        this.model = "gemini-2.5-flash";
+        this.model = "gemini-1.5-flash-001"; // Updated to user memory preference
         this.blackboard = blackboard;
     }
 
@@ -142,66 +142,47 @@ Do not use markdown. Do not add commentary. Just the story text.
 `;
         }
 
-        // Create status summary
-        let statusSummary = "현재 파티 상태:\n";
-        let memoryTags = "";
-
+        // Use "Middle Manager" Logic: getAIContext('EVENT') for each member
+        let characterContexts = [];
         partyMembers.forEach((m, index) => {
             if (index === 0) return; // Skip player (first member)
 
-            // MBTI Integration
-            const mbtiInfo = m.mbti_type ? `[MBTI: ${m.mbti_type}]` : "";
-            statusSummary += `- ${m.name} (${m.jobClass}) ${mbtiInfo}: HP ${m.hp}/${m.maxHp} (${m.isAlive() ? '생존' : '기절'})\n`;
-
-            // Collect Memory Tags
-            if (m.memory_tags) {
-                const traits = m.memory_tags.traits.join(", ");
-                const titles = m.memory_tags.titles.join(", ");
-                const relationships = m.memory_tags.relationships.join(", ");
-
-                if (traits || titles || relationships) {
-                    memoryTags += `- ${m.name} 특성: [${traits}] | 칭호: [${titles}] | 관계: [${relationships}]\n`;
-                }
-            }
-
-            // MBTI Behavioral Hints
-            if (m.mbti) {
-                let behaviorHint = `  > ${m.name}의 행동 패턴: `;
-                if (m.mbti.E > 20) behaviorHint += "적극적이고 대담함. ";
-                if (m.mbti.E < -20) behaviorHint += "신중하고 경계함. ";
-                if (m.mbti.S > 20) behaviorHint += "현실적이고 관찰함. ";
-                if (m.mbti.S < -20) behaviorHint += "직관적이고 상상력이 풍부함. ";
-                if (m.mbti.T > 20) behaviorHint += "논리적이고 계산적임. ";
-                if (m.mbti.T < -20) behaviorHint += "감정적이고 동료를 챙김. ";
-                if (m.mbti.J > 20) behaviorHint += "계획적이고 질서 정연함. ";
-                if (m.mbti.J < -20) behaviorHint += "유연하고 즉흥적임. ";
-                memoryTags += behaviorHint + "\n";
+            // If Character class has getAIContext, use it. Otherwise fallback.
+            if (typeof m.getAIContext === 'function') {
+                characterContexts.push(m.getAIContext('EVENT'));
+            } else {
+                // Fallback for older objects if any
+                characterContexts.push({
+                    name: m.name,
+                    jobClass: m.jobClass,
+                    hp: `${m.hp}/${m.maxHp}`
+                });
             }
         });
 
         // Event Description
-        const eventDesc = `현재 상황 [${pageEvent.title}]:\n${pageEvent.description}`;
+        const eventDesc = `Current Situation [${pageEvent.title}]:\n${pageEvent.description}`;
 
         return `
 ${SYSTEM_PROMPT}
 
 ${blackboardContext}
 
-[세계관]
+[World Lore]
 ${WORLD_LORE}
 
-[규칙]
+[Game Rules]
 ${GAME_RULES}
 
-[캐릭터 페르소나]
+[Character Personas]
 ${JSON.stringify(PERSONAS, null, 2)}
 
-[캐릭터 기억 및 특성 (이 정보를 바탕으로 롤플레이 스타일을 조정하세요)]
-${memoryTags || "없음"}
-
-${statusSummary}
+[Active Party Context (JSON Data)]
+${JSON.stringify(characterContexts, null, 2)}
 
 ${eventDesc}
+
+Generate a JSON response representing the party's reaction.
 `;
     }
 }
