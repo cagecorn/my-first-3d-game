@@ -672,15 +672,18 @@ class GameApp {
         try {
             const reactions = await this.aiManager.generatePartyReaction(selectedMembers, contextData);
 
-            // 3. Display
-            reactions.forEach(r => {
+            // 3. Display (Sequential)
+            for (const r of reactions) {
                 // Ensure format compatibility
                 const name = r.name || r.role;
                 const action = r.action ? `<i>*${r.action}*</i> ` : "";
                 const text = r.text || "...";
 
                 this.ui.log(`<div class="ml-4 my-1 text-sm"><span class="font-bold text-blue-300">${name}:</span> ${action}"${text}"</div>`, 'normal');
-            });
+
+                // Wait 1.5s before next message
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
         } catch (e) {
             console.error("Party reaction error", e);
         }

@@ -314,9 +314,6 @@ ${WORLD_LORE}
 [Game Rules]
 ${GAME_RULES}
 
-[Character Personas]
-${JSON.stringify(PERSONAS, null, 2)}
-
 [Active Party Context (JSON Data)]
 ${JSON.stringify(characterContexts, null, 2)}
 
