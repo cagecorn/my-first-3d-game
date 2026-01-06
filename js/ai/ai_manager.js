@@ -109,6 +109,17 @@ Language: Korean (Web Novel Style)
         return await this._callGemini(prompt);
     }
 
+    async geminiNarrate(text) {
+        if (!this.apiKey) return null;
+
+        const prompt = `
+Input: "${text}"
+
+Instruction: Act as the Narrator. Present this scene to the player in Korean, adding atmosphere and detail consistent with the Dark Fantasy setting.
+`;
+        return await this._callGemini(prompt);
+    }
+
     async generateCombatCommentary(eventData) {
         if (!this.apiKey) return "Combat intensifies...";
 
