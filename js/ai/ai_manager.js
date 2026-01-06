@@ -5,7 +5,7 @@ import { SYSTEM_PROMPT } from './config/system.js';
 export class AIManager {
     constructor(blackboard = null) {
         this.apiKey = null;
-        this.model = "gemini-1.5-flash-001"; // Updated to user memory preference
+        this.model = "gemini-2.5-flash"; // Updated to user memory preference
         this.blackboard = blackboard;
     }
 
