@@ -180,6 +180,9 @@ Input (from JS Engine):
 \`\`\`json
 ${JSON.stringify(inputData, null, 2)}
 \`\`\`
+
+Generate a combat description based on the input.
+Constraint: Keep it very brief (1-2 sentences).
 `;
 
         return await this._callGemini(prompt);
@@ -229,24 +232,23 @@ ${userPrompt}
         }
     }
 
-    async generatePartyReaction(partyMembers, pageEvent) {
+    async generatePartyReaction(partyMembers, contextData) {
         if (!this.apiKey) {
             return [];
         }
-        const context = this._buildContext(partyMembers, pageEvent);
-        const resultText = await this._callGemini(context);
+        const promptContext = this._buildContext(partyMembers, contextData);
+        const resultText = await this._callGemini(promptContext);
 
         if (this.blackboard && this.blackboard.getLogManager) {
              // Extract context data again for logging (or refactor _buildContext to return it)
-             // For now, we'll just log what we can easily access.
              this.blackboard.getLogManager().addLog({
                 Trigger_Event: "Party_Reaction",
                 Active_Variables: {
-                    Event_Title: pageEvent.title,
-                    Event_Type: pageEvent.type || "Unknown"
+                    Context_Type: contextData.type || "Unknown",
+                    Raw_Data: contextData
                 },
                 Calculated_Tags: ["Party_Reaction_Logic"],
-                AI_Instruction_Sent: context.trim(),
+                AI_Instruction_Sent: promptContext.trim(),
                 Final_Output_Text: resultText
             });
         }
@@ -261,7 +263,7 @@ ${userPrompt}
         }
     }
 
-    _buildContext(partyMembers, pageEvent) {
+    _buildContext(partyMembers, contextData) {
         // Blackboard Context
         let blackboardContext = "";
         if (this.blackboard) {
@@ -277,8 +279,8 @@ ${userPrompt}
 
         // Use "Middle Manager" Logic: getAIContext('EVENT') for each member
         let characterContexts = [];
-        partyMembers.forEach((m, index) => {
-            if (index === 0) return; // Skip player (first member)
+        partyMembers.forEach((m) => {
+            // Note: We process ALL passed members. Logic for selecting *which* members to pass is in main.js.
 
             // If Character class has getAIContext, use it. Otherwise fallback.
             if (typeof m.getAIContext === 'function') {
@@ -293,8 +295,15 @@ ${userPrompt}
             }
         });
 
-        // Event Description
-        const eventDesc = `Current Situation [${pageEvent.title}]:\n${pageEvent.description}`;
+        // Context Description
+        let situationDesc = "";
+        if (contextData.type === 'PAGE_ARRIVAL') {
+             situationDesc = `Current Situation [Exploration]:\nArrived at ${contextData.title}.\n${contextData.description}`;
+        } else if (contextData.type === 'COMBAT_EVENT') {
+             situationDesc = `Current Situation [Combat]:\n${contextData.dmText}\n(Event: ${contextData.trigger} by ${contextData.actor})`;
+        } else {
+             situationDesc = `Current Situation: ${JSON.stringify(contextData)}`;
+        }
 
         return `
 ${blackboardContext}
@@ -311,12 +320,14 @@ ${JSON.stringify(PERSONAS, null, 2)}
 [Active Party Context (JSON Data)]
 ${JSON.stringify(characterContexts, null, 2)}
 
-${eventDesc}
+${situationDesc}
 
 [Task]
-Generate a JSON Array representing the party's reaction to the situation.
-Format: [{"role": "Class", "name": "Name", "text": "Dialogue"}]
-Language: Korean
+Generate a JSON Array representing the reaction of these SPECIFIC characters to the situation.
+Requirement:
+- Include "Action" (rich description of movement/expression) and "Dialogue" (short, punchy).
+- Format: [{"role": "Class", "name": "Name", "action": "Action description", "text": "Dialogue"}]
+- Language: Korean
 `;
     }
 }

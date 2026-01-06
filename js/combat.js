@@ -1,7 +1,7 @@
 import { Character } from './character.js';
 
 // Configuration
-const NARRATION_CHANCE = 0.3; // 30% chance for AI to comment on boring turns
+const NARRATION_CHANCE = 0.0; // Disabled random chance for normal turns as per user request
 const ZONE = {
     ALLY_FRONT: 'Ally_Front',
     ALLY_BACK: 'Ally_Back',
@@ -335,7 +335,7 @@ export class CombatManager {
         let shouldTrigger = false;
         if (actor.isInsane()) shouldTrigger = true;
         if (isCritical || instinctTag || isKill) shouldTrigger = true;
-        if (Math.random() < NARRATION_CHANCE) shouldTrigger = true;
+        // if (Math.random() < NARRATION_CHANCE) shouldTrigger = true; // Disabled for now
 
         if (shouldTrigger && !this.isPaused) {
              const narrativeData = {
