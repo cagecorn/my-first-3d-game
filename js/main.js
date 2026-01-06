@@ -33,6 +33,7 @@ class GameApp {
         this.ui.onStartGame = (key) => this.handleStartGame(key);
         this.ui.onTurnPage = () => this.handleTurnPage();
         this.ui.onInventory = () => this.handleInventory();
+        this.ui.onDownloadLog = () => this.blackboard.getLogManager().downloadLogs();
 
         // Feedback Callbacks
         this.ui.onApprove = (charName) => this.handleFeedback(charName, 2);

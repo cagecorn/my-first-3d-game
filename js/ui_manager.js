@@ -3,6 +3,7 @@ export class UIManager {
         this.logElement = document.getElementById('story-log');
         this.btnTurnPage = document.getElementById('btn-turn-page');
         this.btnInventory = document.getElementById('btn-inventory');
+        this.btnDownloadLog = document.getElementById('btn-download-log');
         this.setupLayer = document.getElementById('layer-setup');
         this.apiKeyInput = document.getElementById('api-key-input');
         this.btnStart = document.getElementById('btn-start-game');
@@ -10,6 +11,7 @@ export class UIManager {
         this.onTurnPage = null; // Callback
         this.onInventory = null; // Callback
         this.onStartGame = null; // Callback
+        this.onDownloadLog = null; // Callback
 
         this.bindEvents();
     }
@@ -31,6 +33,12 @@ export class UIManager {
         this.btnInventory.addEventListener('click', () => {
             if (this.onInventory) this.onInventory();
         });
+
+        if (this.btnDownloadLog) {
+            this.btnDownloadLog.addEventListener('click', () => {
+                if (this.onDownloadLog) this.onDownloadLog();
+            });
+        }
     }
 
     // Hide Setup Modal

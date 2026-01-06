@@ -58,9 +58,27 @@ Describe a scene based on these keywords: [${pageData.keywords.join(", ")}].
 The location is called "${pageData.fullName}".
 Make it sound dangerous but tempting.
 ${verbosityInstruction}
+
+Output Language: Korean (Natural webtoon style)
 `;
 
-        return this._callGemini(prompt);
+        const result = await this._callGemini(prompt);
+
+        if (this.blackboard && this.blackboard.getLogManager) {
+            this.blackboard.getLogManager().addLog({
+                Trigger_Event: "Procedural_Story_Generation",
+                Active_Variables: {
+                    Page_Title: pageData.fullName,
+                    Keywords: pageData.keywords,
+                    Total_Weight: pageData.totalWeight
+                },
+                Calculated_Tags: [verbosityInstruction],
+                AI_Instruction_Sent: prompt.trim(),
+                Final_Output_Text: result
+            });
+        }
+
+        return result;
     }
 
     async generateStory(template, keywords) {
@@ -117,6 +135,21 @@ Do not use markdown. Do not add commentary. Just the story text.
         }
         const context = this._buildContext(partyMembers, pageEvent);
         const resultText = await this._callGemini(context);
+
+        if (this.blackboard && this.blackboard.getLogManager) {
+             // Extract context data again for logging (or refactor _buildContext to return it)
+             // For now, we'll just log what we can easily access.
+             this.blackboard.getLogManager().addLog({
+                Trigger_Event: "Party_Reaction",
+                Active_Variables: {
+                    Event_Title: pageEvent.title,
+                    Event_Type: pageEvent.type || "Unknown"
+                },
+                Calculated_Tags: ["Party_Reaction_Logic"],
+                AI_Instruction_Sent: context.trim(),
+                Final_Output_Text: resultText
+            });
+        }
 
         try {
              // Clean up Markdown code blocks if present
@@ -183,6 +216,7 @@ ${JSON.stringify(characterContexts, null, 2)}
 ${eventDesc}
 
 Generate a JSON response representing the party's reaction.
+Ensure all dialogue text is in Korean (Natural webtoon style).
 `;
     }
 }
