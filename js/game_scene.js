@@ -8,7 +8,17 @@ export class BattleScene extends Phaser.Scene {
     }
 
     preload() {
-        // No assets to load yet
+        // Load UI Assets
+        this.load.path = 'assets/images/unit-ui/';
+        const images = [
+            'android-ui.png', 'clown-ui.png', 'commander-ui.png', 'dark-knight-ui.png',
+            'esper-ui.png', 'flyingmen-ui.png', 'ghost-ui.png', 'gunner-ui.png',
+            'hacker-ui.png', 'mechanic-ui.png', 'medic-ui.png', 'nanomancer-ui.png',
+            'paladin-ui.png', 'plague-doctor-ui.png', 'sentinel-ui.png', 'warrior-ui.png'
+        ];
+        images.forEach(img => {
+            this.load.image(img.replace('.png', ''), img);
+        });
     }
 
     create() {
@@ -25,87 +35,143 @@ export class BattleScene extends Phaser.Scene {
         this.children.removeAll(); // Clear previous scene
         this.visuals.clear();
 
+        // Background / Layout Guide
+        // Party Area Background (Bottom)
+        // this.add.rectangle(275, 520, 530, 140, 0x111111).setStrokeStyle(1, 0x333333);
+
         this.createPartyVisuals(partyMembers);
         this.createEnemyVisuals(enemies);
     }
 
+    getJobImage(jobClass) {
+        // Map job class to image key
+        const map = {
+            'Warrior': 'warrior-ui',
+            'Barbarian': 'dark-knight-ui',
+            'Sniper': 'gunner-ui',
+            'Healer': 'medic-ui',
+            'Paladin': 'paladin-ui',
+            'Mechanic': 'mechanic-ui',
+            // Add more as needed
+        };
+        // Simple heuristic for others or fallback
+        return map[jobClass] || 'warrior-ui';
+    }
+
+    getEnemyImage(name) {
+        // Simple hash to pick a random-ish but consistent monster image
+        const keys = ['ghost-ui', 'plague-doctor-ui', 'flyingmen-ui', 'android-ui', 'clown-ui'];
+        const idx = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % keys.length;
+        return keys[idx];
+    }
+
     createPartyVisuals(members) {
-        const startX = 50;
-        const startY = 300;
-        const gap = 120;
+        // Layout: Bottom of screen.
+        // Front Row: Left 2 slots. Back Row: Right 2 slots.
+        // Y = 500 approx.
+        const startX = 85;
+        const gap = 125;
+        const y = 480;
+
+        // Visual Labels for Rows
+        this.add.text(145, y - 80, "FRONT LINE", { fontSize: '16px', color: '#ff4444', fontStyle: 'bold' }).setOrigin(0.5);
+        this.add.text(395, y - 80, "BACK LINE", { fontSize: '16px', color: '#4444ff', fontStyle: 'bold' }).setOrigin(0.5);
 
         members.forEach((member, i) => {
+            // Layout: 0,1 -> Front (Left), 2,3 -> Back (Right)
             const x = startX + (i * gap);
-            const y = startY;
 
             const container = this.add.container(x, y);
 
-            // Sprite Placeholder
-            const circle = this.add.circle(0, 0, 30, 0x3498db);
-            container.add(circle);
+            // Portrait Box
+            const box = this.add.rectangle(0, 0, 100, 100, 0x000000).setStrokeStyle(2, 0x888888);
+            container.add(box);
+
+            // Image
+            const imgKey = this.getJobImage(member.jobClass);
+            const sprite = this.add.image(0, 0, imgKey);
+            sprite.setDisplaySize(96, 96);
+            container.add(sprite);
 
             // Name
+            const nameBg = this.add.rectangle(0, 40, 96, 20, 0x000000, 0.7);
+            container.add(nameBg);
             const name = this.add.text(0, 40, member.name, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
             container.add(name);
 
             // HP Bar
-            const hpBg = this.add.rectangle(0, 55, 60, 6, 0x333333);
+            const hpBg = this.add.rectangle(0, 60, 96, 6, 0x333333);
             container.add(hpBg);
-            const hpFill = this.add.rectangle(-30, 55, 60, 6, 0xe74c3c).setOrigin(0, 0.5);
+            const hpFill = this.add.rectangle(-48, 60, 96, 6, 0xe74c3c).setOrigin(0, 0.5);
             container.add(hpFill);
 
             // AP Bar
-            const apBg = this.add.rectangle(0, 65, 60, 6, 0x333333);
+            const apBg = this.add.rectangle(0, 68, 96, 4, 0x333333);
             container.add(apBg);
-            const apFill = this.add.rectangle(-30, 65, 0, 6, 0xf1c40f).setOrigin(0, 0.5);
+            const apFill = this.add.rectangle(-48, 68, 0, 4, 0xf1c40f).setOrigin(0, 0.5);
             container.add(apFill);
 
             this.visuals.set(member, {
                 container,
+                sprite,
                 hpFill,
                 apFill,
-                sprite: circle,
-                maxWidth: 60
+                maxWidth: 96
             });
         });
     }
 
     createEnemyVisuals(enemies) {
-        const startX = 400;
-        const startY = 100;
-        const gap = 100;
+        // Layout: Top Left Area
+        // Front Row (1,2): Lower Y (~300)
+        // Back Row (3,4): Higher Y (~150)
+
+        const centerX = 275;
 
         enemies.forEach((enemy, i) => {
-            const x = startX;
-            const y = startY + (i * gap);
+            let x, y;
+
+            // i=0,1 -> Front. i=2,3 -> Back.
+            if (i < 2) {
+                // Front Row
+                y = 300;
+                x = centerX + ((i === 0 ? -1 : 1) * 80);
+            } else {
+                // Back Row
+                y = 150;
+                x = centerX + ((i === 2 ? -1 : 1) * 120);
+            }
 
             const container = this.add.container(x, y);
 
-            const rect = this.add.rectangle(0, 0, 50, 50, 0xe74c3c);
-            container.add(rect);
+            // Enemy Sprite
+            const imgKey = this.getEnemyImage(enemy.name);
+            const sprite = this.add.image(0, 0, imgKey);
+            // Random slight scale variation for variety
+            const scale = 0.9 + (Math.random() * 0.2);
+            sprite.setDisplaySize(110 * scale, 110 * scale);
+            // Flip enemies to face left (if original images face right)
+            // Assuming UI portraits face front/right.
+            sprite.setFlipX(true);
 
-            const name = this.add.text(0, 40, enemy.name, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
+            container.add(sprite);
+
+            // Name
+            const name = this.add.text(0, 65, enemy.name, { fontSize: '14px', fill: '#ffaaaa', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5);
             container.add(name);
 
-            // HP/AP for enemies too?
-            // Minimal enemies usually just show HP or nothing. Let's add small HP bar.
-            const hpBg = this.add.rectangle(0, -35, 50, 4, 0x333333);
+            // HP Bar
+            const hpBg = this.add.rectangle(0, 80, 80, 6, 0x000000);
             container.add(hpBg);
-            const hpFill = this.add.rectangle(-25, -35, 50, 4, 0xe74c3c).setOrigin(0, 0.5);
+            const hpFill = this.add.rectangle(-40, 80, 80, 6, 0xff0000).setOrigin(0, 0.5);
             container.add(hpFill);
-
-            // AP Bar (optional for enemies, but good for strategy)
-            const apBg = this.add.rectangle(0, -30, 50, 4, 0x333333);
-            container.add(apBg);
-            const apFill = this.add.rectangle(-25, -30, 0, 4, 0xf1c40f).setOrigin(0, 0.5);
-            container.add(apFill);
 
             this.visuals.set(enemy, {
                 container,
-                sprite: rect,
+                sprite,
                 hpFill,
-                apFill,
-                maxWidth: 50
+                apFill: { width: 0 }, // Mock AP for enemy if code tries to update it
+                maxWidth: 80
             });
         });
     }
@@ -117,7 +183,9 @@ export class BattleScene extends Phaser.Scene {
             const visual = this.visuals.get(update.char);
             if (visual) {
                 // Update AP
-                visual.apFill.width = (update.ap / update.maxAp) * visual.maxWidth;
+                if (visual.apFill && visual.apFill.width !== undefined) {
+                    visual.apFill.width = (update.ap / update.maxAp) * visual.maxWidth;
+                }
 
                 // Update HP
                 if (update.char.maxHp > 0) {
@@ -133,11 +201,17 @@ export class BattleScene extends Phaser.Scene {
 
         if (attackerVis) {
              // Jump forward tween
+             // Direction depends on Y position (Bottom units move UP, Top units move DOWN/CENTER)
+             // Party is Y > 400. Enemies Y < 400.
+             const isParty = attackerVis.container.y > 400;
+             const dy = isParty ? -30 : 30;
+
              this.tweens.add({
                  targets: attackerVis.container,
-                 x: attackerVis.container.x + (attackerVis.container.x < 300 ? 20 : -20),
-                 duration: 100,
-                 yoyo: true
+                 y: attackerVis.container.y + dy,
+                 duration: 150,
+                 yoyo: true,
+                 ease: 'Power1'
              });
         }
 
@@ -145,16 +219,22 @@ export class BattleScene extends Phaser.Scene {
             // Flash
             this.tweens.add({
                 targets: targetVis.sprite,
-                alpha: 0,
+                alpha: 0.3,
                 duration: 50,
                 yoyo: true,
                 repeat: 1
             });
 
             // Shake
-            // this.cameras.main.shake(100, 0.005); // Global shake might be too much if frequent
-            targetVis.container.x += 5;
-            this.time.delayedCall(50, () => targetVis.container.x -= 5);
+            const startX = targetVis.container.x;
+            this.tweens.add({
+                targets: targetVis.container,
+                x: startX + 5,
+                duration: 50,
+                yoyo: true,
+                repeat: 3,
+                onComplete: () => targetVis.container.x = startX
+            });
 
             // Float Text
             this.showFloatingText(targetVis.container.x, targetVis.container.y, `-${damage}`);
@@ -178,18 +258,19 @@ export class BattleScene extends Phaser.Scene {
 
     showFloatingText(x, y, message) {
         const text = this.add.text(x, y - 20, message, {
-            fontSize: '20px',
+            fontSize: '24px',
             fontStyle: 'bold',
             fill: '#fff',
-            stroke: '#000',
+            stroke: '#cc0000',
             strokeThickness: 4
         }).setOrigin(0.5);
 
         this.tweens.add({
             targets: text,
-            y: y - 50,
+            y: y - 60,
             alpha: 0,
-            duration: 800,
+            duration: 1000,
+            ease: 'Cubic.out',
             onComplete: () => text.destroy()
         });
     }
