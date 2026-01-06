@@ -327,4 +327,43 @@ Requirement:
 - Language: Korean
 `;
     }
+
+    async generateCampfireDialogue(character, userText, contextMode) {
+        if (!this.apiKey) {
+            return `(API Key missing) ... "${userText}" ...`;
+        }
+
+        // 1. Build Character Context
+        // Use getAIContext if available, otherwise minimal fallback
+        const charContext = (typeof character.getAIContext === 'function')
+            ? character.getAIContext('EVENT')
+            : { name: character.name, jobClass: character.jobClass, mbti: character.mbti_type };
+
+        // 2. Build Prompt
+        const prompt = `
+${SYSTEM_PROMPT}
+
+[Context]
+The player (Messiah) is talking to ${character.name} at the ${contextMode === 'Libido' ? 'Secret Whisper (Intimate/Erotic)' : 'Campfire (Rest/Reflection)'}.
+
+[Character Profile]
+${JSON.stringify(charContext, null, 2)}
+
+[User Input]
+"${userText}"
+
+[Instruction]
+Respond to the user as ${character.name}.
+- Maintain the character's persona and MBTI traits.
+- If Context is 'Libido', the tone should be intimate, heavy, and submissive/dominant based on traits.
+- If Context is 'Campfire', the tone should be reflective, loyal, or weary.
+- Include a brief action/expression in parentheses at the start.
+- Length: Short to Medium (1-3 sentences).
+- Language: Korean.
+
+Output format: Just the dialogue string (with action).
+`;
+
+        return await this._callGemini(prompt);
+    }
 }

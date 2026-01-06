@@ -87,6 +87,8 @@ body {
     font-weight: bold;
     display: flex;
     justify-content: space-between;
+    cursor: move; /* Indicates draggability */
+    user-select: none;
 }
 
 #chat-history {

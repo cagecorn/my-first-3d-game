@@ -724,6 +724,67 @@ class GameApp {
 
         // Reset Chat with System Msg
         document.getElementById('chat-history').innerHTML = `<div class="chat-msg system">>> 대화 채널이 열렸습니다. 대상에게 말을 거세요.</div>`;
+
+        this.enableDrag(overlay);
+    }
+
+    enableDrag(element) {
+        const header = element.querySelector('.chat-header');
+        if (!header || element.dataset.dragEnabled === "true") return;
+
+        element.dataset.dragEnabled = "true";
+
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+
+        // Store offsets on the element to persist state between open/close
+        // Initialize if not present
+        if (!element.xOffset) element.xOffset = 0;
+        if (!element.yOffset) element.yOffset = 0;
+
+        const dragStart = (e) => {
+            if (e.target === header || header.contains(e.target)) {
+                initialX = e.clientX - element.xOffset;
+                initialY = e.clientY - element.yOffset;
+                isDragging = true;
+
+                // Add listeners only when dragging starts
+                document.addEventListener('mousemove', drag);
+                document.addEventListener('mouseup', dragEnd);
+            }
+        };
+
+        const dragEnd = (e) => {
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+
+            // Clean up listeners
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', dragEnd);
+        };
+
+        const drag = (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+
+                element.xOffset = currentX;
+                element.yOffset = currentY;
+
+                setTranslate(currentX, currentY, element);
+            }
+        };
+
+        const setTranslate = (xPos, yPos, el) => {
+            el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
+        };
+
+        header.addEventListener('mousedown', dragStart);
     }
 
     closeChat() {
@@ -751,39 +812,36 @@ class GameApp {
         this.callDialogueAI(targetID, text);
     }
 
-    callDialogueAI(targetID, userText) {
+    async callDialogueAI(targetID, userText) {
         // 1. Get Target Data
         const targetData = this.party.members.find(u => u.name.includes(targetID)) || this.party.members[0];
 
-        // 2. Mock AI Logic (as per request)
-        // In real implementation, this would call this.aiManager.generateDialogue(...)
+        // Display typing indicator (optional, but good for UX)
+        // For now we just wait
 
-        setTimeout(() => {
-            // Simulated Response based on Libido/Mode
-            const isLibido = this.isLibidoPage();
-            let responseText = "......";
-            let effect = { Libido: 0, Loyalty: 0 };
+        const isLibido = this.isLibidoPage();
+        const mode = isLibido ? 'Libido' : 'Campfire';
 
-            if (isLibido) {
-                responseText = `(거친 숨을 몰아쉬며) ${userText}? 당신이 원하신다면... 제 모든 것을 보이겠습니다.`;
-                effect.Libido = 5;
-            } else {
-                responseText = `(고개를 끄덕이며) "${userText}"라... 명심하겠습니다, 메시아여.`;
-                effect.Loyalty = 2;
-            }
+        // 2. Call AI
+        try {
+            const responseText = await this.aiManager.generateCampfireDialogue(targetData, userText, mode);
 
             // Output
             this.addChatBubble(`${targetData.name}: "${responseText}"`, 'ai');
 
-            // Apply Effect
+            // Apply Effect (Simple logic remains)
             if (targetData.hilbertSpace) {
-                targetData.hilbertSpace.libidoLevel += effect.Libido;
-                // Loyalty update if exists
+                if (isLibido) {
+                    targetData.hilbertSpace.libidoLevel += 5;
+                } else {
+                    targetData.hilbertSpace.loyaltyMessiah += 2;
+                }
             }
-            // Log effect
-            console.log(`[Chat Effect] ${targetData.name} Libido +${effect.Libido}`);
 
-        }, 1000);
+        } catch (e) {
+            console.error(e);
+            this.addChatBubble(`${targetData.name}: "..."`, 'ai');
+        }
     }
 
     addChatBubble(msg, type) {
