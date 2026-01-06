@@ -1,4 +1,5 @@
 import { LogManager } from './log_manager.js';
+import { DBManager } from './db_manager.js';
 
 export const Tones = {
     DEFAULT: 'DEFAULT',
@@ -116,6 +117,21 @@ export class Blackboard {
     addAIMemory(memorySummary) {
         // Keep only last 5 memories to save tokens if needed, or store all for the "Letter"
         this.state.Messiah_State.AI_Memories.push(memorySummary);
+
+        // [Jules' Feature] Persistence of Memory
+        // Save to DB asynchronously
+        const snapshot = {
+            id: `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'snapshot',
+            timestamp: Date.now(),
+            content: memorySummary,
+            keywords: [] // To be extracted or passed if needed
+        };
+        DBManager.saveSnapshot(snapshot).then(() => {
+            console.log(`[Blackboard] Saved Emotional Snapshot: ${snapshot.id}`);
+        }).catch(err => {
+            console.error(`[Blackboard] Failed to save snapshot:`, err);
+        });
     }
 
     // --- Log Manager ---

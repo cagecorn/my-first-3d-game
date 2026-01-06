@@ -104,4 +104,36 @@ export class DBManager {
             request.onerror = () => reject(request.error);
         });
     }
+
+    // --- Emotional Snapshots ---
+
+    static async saveSnapshot(snapshotData) {
+        // snapshotData structure: { id: uuid, type: 'snapshot', timestamp: number, content: string, keywords: [] }
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_MEMORY_BOX], 'readwrite');
+            const store = transaction.objectStore(STORE_MEMORY_BOX);
+            const request = store.put(snapshotData);
+
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async getSnapshots() {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_MEMORY_BOX], 'readonly');
+            const store = transaction.objectStore(STORE_MEMORY_BOX);
+            const request = store.getAll();
+
+            request.onsuccess = (event) => {
+                const results = event.target.result || [];
+                // Filter for snapshots only
+                const snapshots = results.filter(item => item.type === 'snapshot');
+                resolve(snapshots);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
 }
