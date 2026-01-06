@@ -95,29 +95,35 @@ Output Language: Korean (Natural webtoon style)
 
         const { triggerType, attacker, target, damage } = eventData;
 
-        let promptType = "";
-        if (triggerType === 'KILL') promptType = "Describe a brutal finishing move.";
-        else if (triggerType === 'CRIT') promptType = "Describe a powerful critical hit with flair.";
-        else if (triggerType === 'CRISIS') promptType = `Describe ${target.name} struggling to stay standing, bleeding heavily.`;
+        // Construct JSON input for the new System Prompt
+        const inputData = {
+            Actor: attacker.name,
+            Action: "Attack",
+            Result: triggerType, // 'KILL', 'CRIT', etc.
+            Instinct_Active: attacker.instinct ? attacker.instinct.name : null,
+            State: {
+                HP: `${attacker.hp}/${attacker.maxHp}`,
+                Target_HP: `${target.hp}/${target.maxHp}`
+            },
+            Visual_Focus: ["Impact", "Blood", "Expression"],
+            Context: `${attacker.name} attacks ${target.name} for ${damage} damage.`
+        };
 
         const prompt = `
-        Context: A fantasy battle.
-        Action: ${attacker.name} used an attack on ${target.name}. Damage: ${damage}.
-        Trigger: ${triggerType}.
-
-        Instruction: ${promptType}
-        Keep it very short (1 sentence). Dynamic and visceral.
-        Output Language: Korean.
-        `;
+Input (from JS Engine):
+\`\`\`json
+${JSON.stringify(inputData, null, 2)}
+\`\`\`
+`;
 
         return await this._callGemini(prompt);
     }
 
     async _callGemini(userPrompt) {
          const fullPrompt = `
-You are the Dungeon Master of a dark fantasy RPG.
+${SYSTEM_PROMPT}
+
 ${userPrompt}
-Do not use markdown. Do not add commentary. Just the story text.
         `;
 
         try {
@@ -220,8 +226,6 @@ Do not use markdown. Do not add commentary. Just the story text.
         const eventDesc = `Current Situation [${pageEvent.title}]:\n${pageEvent.description}`;
 
         return `
-${SYSTEM_PROMPT}
-
 ${blackboardContext}
 
 [World Lore]
@@ -238,8 +242,10 @@ ${JSON.stringify(characterContexts, null, 2)}
 
 ${eventDesc}
 
-Generate a JSON response representing the party's reaction.
-Ensure all dialogue text is in Korean (Natural webtoon style).
+[Task]
+Generate a JSON Array representing the party's reaction to the situation.
+Format: [{"role": "Class", "name": "Name", "text": "Dialogue"}]
+Language: Korean
 `;
     }
 }
