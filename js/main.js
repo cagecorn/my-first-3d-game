@@ -152,6 +152,13 @@ class GameApp {
             this.ui.log(`<h3>${this.currentPage.title}</h3>`, 'normal');
             this.ui.log(this.currentPage.description, 'normal');
 
+            // [NEW] Party Reactions for Exploration
+            this.triggerPartyReaction({
+                type: 'PAGE_ARRIVAL',
+                title: this.currentPage.title,
+                description: this.currentPage.description
+            });
+
             // Map Book Type to Game State
             if (this.currentPage.type === 'battle' || this.currentPage.type === 'boss') {
                 // Combat is triggered via "Fight" choice usually, but we can set state context
@@ -426,6 +433,15 @@ class GameApp {
                     try {
                         const commentary = await this.aiManager.generateCombatCommentary(data);
                         this.ui.log(`<div class="p-2 my-2 bg-gray-800 text-gray-200 border-l-4 border-purple-500 italic text-sm">${commentary}</div>`, 'normal');
+
+                        // [NEW] Party Reaction to Combat Event (Critical/Kill/etc)
+                        await this.triggerPartyReaction({
+                            type: 'COMBAT_EVENT',
+                            trigger: data.triggerType,
+                            actor: data.attacker.name,
+                            dmText: commentary
+                        });
+
                     } catch (e) {
                         console.error("Narrative generation failed", e);
                     }
@@ -540,6 +556,34 @@ class GameApp {
             this.party.inventory.forEach(item => {
                 this.ui.log(` - ${item.name} (${item.value})`);
             });
+        }
+    }
+
+    async triggerPartyReaction(contextData) {
+        // 1. Select 1-2 Random Members
+        const activeMembers = this.party.members.filter(m => m.isAlive());
+        if (activeMembers.length === 0) return;
+
+        // Shuffle and pick 1-2
+        const shuffled = activeMembers.sort(() => 0.5 - Math.random());
+        const count = Math.floor(Math.random() * 2) + 1; // 1 or 2
+        const selectedMembers = shuffled.slice(0, count);
+
+        // 2. Call AI
+        try {
+            const reactions = await this.aiManager.generatePartyReaction(selectedMembers, contextData);
+
+            // 3. Display
+            reactions.forEach(r => {
+                // Ensure format compatibility
+                const name = r.name || r.role;
+                const action = r.action ? `<i>*${r.action}*</i> ` : "";
+                const text = r.text || "...";
+
+                this.ui.log(`<div class="ml-4 my-1 text-sm"><span class="font-bold text-blue-300">${name}:</span> ${action}"${text}"</div>`, 'normal');
+            });
+        } catch (e) {
+            console.error("Party reaction error", e);
         }
     }
 
