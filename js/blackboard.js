@@ -1,3 +1,5 @@
+import { LogManager } from './log_manager.js';
+
 export const Tones = {
     DEFAULT: 'DEFAULT',
     DRAMATIC: 'DRAMATIC',
@@ -7,6 +9,7 @@ export const Tones = {
 
 export class Blackboard {
     constructor() {
+        this.logManager = new LogManager();
         this.state = {
             Global_State: {
                 Chapter: "Chapter 1: The Beginning",
@@ -82,6 +85,11 @@ export class Blackboard {
 
     getMemory() {
         return this.state.Memory_Buffer;
+    }
+
+    // --- Log Manager ---
+    getLogManager() {
+        return this.logManager;
     }
 
     // --- Debug/Dump ---
