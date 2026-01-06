@@ -8,7 +8,7 @@ import { CHARACTER_PRESETS } from './data/character_presets.js';
 import { ItemFactory } from './item.js';
 import { CombatManager } from './combat.js';
 import { Blackboard } from './blackboard.js';
-import { Unit } from './unit_placeholder.js'; // Placeholder if needed, but we use Character
+// import { Unit } from './unit_placeholder.js'; // Placeholder if needed, but we use Character
 
 // [Game State Definitions]
 const GAME_STATE = {
@@ -35,6 +35,10 @@ class GameApp {
         // State
         this.currentPage = null;
         this.state = GAME_STATE.PAGE_SELECT;
+
+        // Chat State
+        this.currentChatTarget = null;
+        this.isChatActive = false;
 
         this.init();
     }
@@ -145,11 +149,20 @@ class GameApp {
             if (this.currentPage.type === 'battle' || this.currentPage.type === 'boss') {
                 // Combat is triggered via "Fight" choice usually, but we can set state context
                 this.state = GAME_STATE.PAGE_SELECT;
+                this.closeChat();
             } else if (this.currentPage.type === 'rest') {
                 // Rest logic handles state transition on choice
                 this.state = GAME_STATE.PAGE_SELECT;
+
+                // Open Chat for Rest
+                this.openChat('Rest');
+                this.aiManager.geminiNarrate("모닥불 타는 소리만 들립니다. 누군가 당신의 말을 기다리는 눈치군요.")
+                     .then(text => { if(text) this.ui.log(text); }) // Simple log or specialized logic
+                     .catch(() => {});
+
             } else {
                 this.state = GAME_STATE.EXPLORE;
+                this.closeChat();
             }
 
             // Render Choices
@@ -455,6 +468,11 @@ class GameApp {
     async triggerLibidoScene() {
         const target = this.party.members.find(u => u.hilbertSpace.libidoLevel >= 90) || this.party.members[0];
 
+        // Open Chat for Libido
+        this.openChat('Libido');
+        // Intro handled in prompt logic but we can do it here too
+        this.addChatBubble("거친 숨소리가 공간을 메웁니다. 지금이라면... 무슨 말이든 허용될 것 같습니다.", "system");
+
         const sceneTags = {
             Type: "Erotic_Scene",
             Actor: target.name,
@@ -519,9 +537,98 @@ class GameApp {
             this.ui.log(`Feedback registered for ${member.name}.`);
         }
     }
+
+    // [Chat Engine Methods]
+    openChat(mode) {
+        this.isChatActive = true;
+        document.getElementById('chat-overlay').classList.remove('hidden');
+        document.getElementById('chat-mode-title').innerText = mode === 'Rest' ? "🔥 CAMPFIRE TALK" : "💋 SECRET WHISPER";
+
+        // Reset Chat with System Msg
+        document.getElementById('chat-history').innerHTML = `<div class="chat-msg system">>> 대화 채널이 열렸습니다. 대상에게 말을 거세요.</div>`;
+    }
+
+    closeChat() {
+        this.isChatActive = false;
+        const overlay = document.getElementById('chat-overlay');
+        if (overlay) overlay.classList.add('hidden');
+    }
+
+    sendChat() {
+        const input = document.getElementById('user-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        // Show User Message
+        this.addChatBubble(text, 'user');
+        input.value = "";
+
+        // Determine Target (Simple Logic)
+        let targetID = "Chris";
+        if (text.includes("테온")) targetID = "Theon";
+        if (text.includes("바렛") || text.includes("Barrett")) targetID = "Barrett";
+        if (text.includes("사일러스") || text.includes("Silas")) targetID = "Silas";
+
+        // Call AI Logic
+        this.callDialogueAI(targetID, text);
+    }
+
+    callDialogueAI(targetID, userText) {
+        // 1. Get Target Data
+        const targetData = this.party.members.find(u => u.name.includes(targetID)) || this.party.members[0];
+
+        // 2. Mock AI Logic (as per request)
+        // In real implementation, this would call this.aiManager.generateDialogue(...)
+
+        setTimeout(() => {
+            // Simulated Response based on Libido/Mode
+            const isLibido = this.isLibidoPage();
+            let responseText = "......";
+            let effect = { Libido: 0, Loyalty: 0 };
+
+            if (isLibido) {
+                responseText = `(거친 숨을 몰아쉬며) ${userText}? 당신이 원하신다면... 제 모든 것을 보이겠습니다.`;
+                effect.Libido = 5;
+            } else {
+                responseText = `(고개를 끄덕이며) "${userText}"라... 명심하겠습니다, 메시아여.`;
+                effect.Loyalty = 2;
+            }
+
+            // Output
+            this.addChatBubble(`${targetData.name}: "${responseText}"`, 'ai');
+
+            // Apply Effect
+            if (targetData.hilbertSpace) {
+                targetData.hilbertSpace.libidoLevel += effect.Libido;
+                // Loyalty update if exists
+            }
+            // Log effect
+            console.log(`[Chat Effect] ${targetData.name} Libido +${effect.Libido}`);
+
+        }, 1000);
+    }
+
+    addChatBubble(msg, type) {
+        const box = document.getElementById('chat-history');
+        const div = document.createElement('div');
+        div.className = `chat-msg ${type}`;
+        div.innerText = msg;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    checkEnter(e) {
+        if(e.key === 'Enter') this.sendChat();
+    }
+
+    isLibidoPage() {
+        const title = document.getElementById('chat-mode-title');
+        return title && title.innerText.includes("WHISPER");
+    }
 }
 
 // Start the Application
 window.addEventListener('DOMContentLoaded', () => {
     window.app = new GameApp();
+    window.Engine = window.app; // Alias for HTML onclick handlers
 });
