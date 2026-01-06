@@ -1,5 +1,18 @@
 import { Character } from './character.js';
 
+// Configuration
+const NARRATION_CHANCE = 0.3; // 30% chance for AI to comment on boring turns
+const ZONE = {
+    ALLY_FRONT: 'Ally_Front',
+    ALLY_BACK: 'Ally_Back',
+    ENEMY_FRONT: 'Enemy_Front',
+    ENEMY_BACK: 'Enemy_Back'
+};
+
+function rollDice(sides = 100) {
+    return Math.floor(Math.random() * sides) + 1;
+}
+
 export class CombatManager {
     constructor(party, onEvent) {
         this.party = party;
@@ -7,24 +20,23 @@ export class CombatManager {
         this.onEvent = onEvent; // (type, data) => void
 
         this.isRunning = false;
-        this.isPaused = false; // New: Logic pause for narrative
-        this.lastFrameTime = 0;
-        this.animationFrameId = null;
+        this.isPaused = false;
 
-        // Cooldown for narrative events to prevent spam
+        // Narrative Cooldowns
         this.lastNarrativeTime = 0;
-        this.narrativeCooldown = 5000; // 5 seconds
+        this.narrativeCooldown = 5000;
+
+        // Round & Turn Management
+        this.roundQueue = []; // Units ordered by Initiative
+        this.currentUnitIndex = 0;
+
+        this.turnDelay = 1000; // ms between turns for pacing
     }
 
     startCombat(difficultyLevel, modifiers = {}) {
         this.generateEnemies(difficultyLevel, modifiers);
 
-        // Reset AP for everyone
-        this.getAllCombatants().forEach(c => {
-            c.ap = 0;
-            c.maxAp = 100;
-        });
-
+        // Notify Start
         this.onEvent('combat_start', {
             party: this.party.members,
             enemies: this.enemies
@@ -32,145 +44,315 @@ export class CombatManager {
 
         this.isRunning = true;
         this.isPaused = false;
-        this.lastFrameTime = performance.now();
-        this.loop();
+
+        // Start Round 1
+        this.startRound();
+    }
+
+    startRound() {
+        if (!this.isRunning) return;
+
+        // 1. Gather all units
+        const allUnits = this.getAllCombatants();
+
+        // 2. Check Win/Loss
+        if (this.checkEndConditions()) return;
+
+        // 3. Calculate Initiative & Sort
+        this.roundQueue = allUnits.filter(u => u.isAlive()).sort((a, b) => {
+            return b.getInitiative() - a.getInitiative();
+        });
+
+        this.currentUnitIndex = 0;
+
+        // Log Round Start
+        this.logSystem(`=== Round Start! Turn Order: ${this.roundQueue.map(u => u.name).join(" > ")} ===`);
+
+        // Execute first turn
+        this.nextTurn();
+    }
+
+    nextTurn() {
+        if (!this.isRunning || this.isPaused) return;
+
+        if (this.currentUnitIndex >= this.roundQueue.length) {
+            // End of Round
+            this.startRound();
+            return;
+        }
+
+        const actor = this.roundQueue[this.currentUnitIndex];
+        this.currentUnitIndex++;
+
+        if (!actor.isAlive()) {
+            // Skip dead units
+            this.nextTurn();
+            return;
+        }
+
+        // Delay for visual pacing
+        setTimeout(() => {
+            this.executeTurn(actor);
+        }, this.turnDelay);
+    }
+
+    resume() {
+        this.isPaused = false;
+        this.nextTurn(); // Continue where we left off
     }
 
     pause() {
         this.isPaused = true;
     }
 
-    resume() {
-        this.isPaused = false;
-        this.lastFrameTime = performance.now(); // Reset time to avoid huge delta
-    }
-
     stopCombat() {
         this.isRunning = false;
-        this.isPaused = false;
-        if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
-        }
     }
 
-    loop() {
-        if (!this.isRunning) return;
-
-        // Loop even if paused, but skip update logic
-        this.animationFrameId = requestAnimationFrame(() => this.loop());
-
-        if (this.isPaused) return;
-
-        const now = performance.now();
-        const deltaTime = (now - this.lastFrameTime) / 1000; // seconds
-        this.lastFrameTime = now;
-
-        this.update(deltaTime);
-
-        if (this.checkEndConditions()) {
-            this.stopCombat(); // Stop loop
-            return;
+    executeTurn(actor) {
+        if (!actor.isAlive()) {
+             this.nextTurn();
+             return;
         }
-    }
 
-    update(deltaTime) {
-        const combatants = this.getAllCombatants();
-        const updates = [];
+        // Logic: Main Action + Sub Action (simplified to 1 card for now as per v0.1 snippet,
+        // but user asked for [1 Main + 1 Sub]. Let's stick to the v0.1 logic provided in the snippet for now which picks *one* card randomly or by logic).
+        // Actually the prompt says: "One Main Action, One Sub Action can be done."
+        // But the snippet says: "const card = actor.skillCards[Math.floor(Math.random()...)]"
+        // I will implement a slightly smarter logic: Try to use Sub Action if condition met, AND Main Action.
 
-        combatants.forEach(c => {
-            if (c.isAlive()) {
-                // AP Growth (Speed modified by 'Frozen' prefix etc if implemented)
-                const apGain = c.spd * 5 * deltaTime;
-                c.ap += apGain;
+        // Filter available cards
+        const mainCards = actor.skillCards ? actor.skillCards.filter(c => c.Type === 'Main') : [];
+        const subCards = actor.skillCards ? actor.skillCards.filter(c => c.Type === 'Sub') : [];
 
-                updates.push({ char: c, ap: c.ap, maxAp: c.maxAp });
+        let actionsTaken = 0;
 
-                if (c.ap >= c.maxAp) {
-                    c.ap = 0;
-                    this.performAction(c);
-                }
+        // 1. Sub Action (Optional, Conditional)
+        for (const card of subCards) {
+            // Check logic
+            let shouldUse = false;
+
+            // If explicit condition exists (e.g. "HP < 50%")
+            if (card.Condition) {
+                 shouldUse = this.evaluateCondition(actor, card.Condition);
             }
-        });
+            else if (card.Type === 'Sub') {
+                 // Default Sub behavior: 30% random usage if no condition
+                 shouldUse = Math.random() < 0.3;
+            }
 
-        // Emit update event for UI/Visuals
-        this.onEvent('combat_update', { updates });
-    }
-
-    performAction(actor) {
-        if (this.isPaused) return; // Double check
-
-        // Determine targets
-        let targets = [];
-        let isPlayerSide = this.party.members.includes(actor);
-
-        if (isPlayerSide) {
-            targets = this.enemies.filter(e => e.isAlive());
-        } else {
-            targets = this.party.getAliveMembers();
+            if (shouldUse) {
+                this.performCardAction(actor, card);
+                actionsTaken++;
+                break; // Limit 1 sub action
+            }
         }
 
+        // 2. Main Action (Mandatory)
+        if (mainCards.length > 0) {
+            const card = mainCards[Math.floor(Math.random() * mainCards.length)];
+            // Delay main action slightly if sub action was taken
+            if (actionsTaken > 0) {
+                 setTimeout(() => this.performCardAction(actor, card), 500);
+            } else {
+                 this.performCardAction(actor, card);
+            }
+        } else {
+            // Fallback Basic Attack
+            this.performBasicAttack(actor);
+        }
+
+        // Turn End -> Next Turn
+        setTimeout(() => this.nextTurn(), 1000);
+    }
+
+    performCardAction(actor, card) {
+        // Find Target
+        const target = this.findTarget(actor, card.Target);
+        if (!target) return;
+
+        // Calc Damage / Effect
+        let damage = 0;
+        let isHeal = false;
+        let isBuff = false;
+
+        // Very basic formula evaluator
+        if (card.Dmg_Formula) {
+            damage = this.evaluateFormula(actor, card.Dmg_Formula);
+        } else if (card.Effect) {
+            if (card.Effect.includes("Heal")) {
+                isHeal = true;
+                damage = this.evaluateFormula(actor, "INT * 1.0"); // Default heal
+            } else {
+                isBuff = true; // Assume other effects are buffs/status
+            }
+        }
+
+        let isCritical = rollDice(100) > 90; // 10% base crit
+        // Instinct: Weakness Scanner
+        if (actor.instinct && actor.instinct.Name === "Weakness_Scanner" && target.hp === target.maxHp) {
+            isCritical = rollDice(100) > 40; // +50% chance roughly
+        }
+
+        if (isCritical && !isHeal && !isBuff) damage = Math.floor(damage * 1.5);
+
+        // Apply
+        let instinctTag = null;
+
+        if (isHeal) {
+            target.heal(damage);
+            this.logSystem(`[Battle] ${actor.name} uses [${card.Name}] -> Heals ${target.name} for ${damage}.`);
+            this.onEvent('action', { type: 'heal', attacker: actor, target: target, amount: damage });
+        } else if (isBuff) {
+            // Apply Buff Logic (Simplified)
+            // Parse "Gain_Shield(5)" or "Buff_STR(3)"
+            this.logSystem(`[Battle] ${actor.name} uses [${card.Name}] -> Effect: ${card.Effect}`);
+
+            // Visual event only for now
+            this.onEvent('action', { type: 'buff', attacker: actor, target: target, effect: card.Effect });
+
+        } else {
+            // Damage
+            const actualDmg = target.takeDamage(damage);
+            this.logSystem(`[Battle] ${actor.name} uses [${card.Name}] -> ${target.name} takes ${actualDmg} dmg.`);
+
+            this.onEvent('action', { type: 'attack', attacker: actor, target: target, damage: actualDmg, isCrit: isCritical });
+
+            // Instinct: Pain Collector
+            if (target.instinct && target.instinct.Trigger === 'On_Hurt') {
+                 target.def += 1; // Simplify effect application
+                 target.hilbertSpace.libidoLevel += 5;
+                 instinctTag = target.instinct.Name;
+                 this.logSystem(`> [Instinct] ${target.name}'s ${instinctTag} triggered!`);
+            }
+        }
+
+        // Trigger Check
+        const context = { actor, target, damage, isCritical, instinctTag, isKill: !target.isAlive() };
+        this.checkNarrativeTriggers(context);
+
+        if (context.isKill) {
+             this.onEvent('death', { target: target });
+
+             // Instinct: Adrenaline Junkie
+             if (actor.instinct && actor.instinct.Trigger === 'On_Kill') {
+                  actor.hp += 5; // Heal 5
+                  this.logSystem(`> [Instinct] ${actor.name}'s Adrenaline_Junkie triggered! Heals 5 HP.`);
+             }
+        }
+    }
+
+    performBasicAttack(actor) {
+        // Fallback
+        const targets = this.enemies.includes(actor) ? this.party.getAliveMembers() : this.enemies.filter(e => e.isAlive());
         if (targets.length === 0) return;
+        const target = targets[0];
+        const dmg = Math.max(1, actor.atk - target.def);
+        target.takeDamage(dmg);
+        this.logSystem(`[Battle] ${actor.name} attacks ${target.name} for ${dmg}.`);
+        this.onEvent('action', { type: 'attack', attacker: actor, target: target, damage: dmg });
+    }
 
-        // Pick random target
-        const target = targets[Math.floor(Math.random() * targets.length)];
+    findTarget(actor, targetLogic) {
+        const enemies = this.getAllCombatants().filter(c => c.isAlive() && (this.enemies.includes(actor) ? this.party.members.includes(c) : this.enemies.includes(c)));
+        const allies = this.getAllCombatants().filter(c => c.isAlive() && (this.enemies.includes(actor) ? this.enemies.includes(c) : this.party.members.includes(c)));
 
-        // Calculate Logic
-        // Crit Chance: 1 Luk = 0.5%
-        const critChance = (actor.stats.luk || 10) * 0.5;
-        const isCrit = (Math.random() * 100) < critChance;
+        if (!targetLogic) return enemies[0]; // Default
 
-        let rawDmg = Math.max(1, actor.atk - (target.def * 0.5));
-        if (isCrit) rawDmg *= 1.5;
+        // Parsing logic
+        if (targetLogic.includes("Self")) return actor;
 
-        // Hit Chance (Dex based?) - Simplifying to 100% for now unless dodge
+        if (targetLogic.includes("Ally_Lowest_HP")) {
+            return allies.sort((a,b) => (a.hp/a.maxHp) - (b.hp/b.maxHp))[0];
+        }
 
-        const actualDmg = target.takeDamage(rawDmg);
-        const isKill = !target.isAlive();
+        if (targetLogic.includes("Enemy")) {
+            // Zone Logic
+            // Front = Melee preference. Back = Snipe preference.
+            const frontEnemies = enemies.filter(e => e.zone === 'Front');
+            const backEnemies = enemies.filter(e => e.zone === 'Back');
 
-        this.onEvent('action', {
-            type: 'attack',
-            attacker: actor,
-            target: target,
-            damage: Math.floor(actualDmg),
-            isCrit: isCrit
-        });
+            if (targetLogic.includes("Front")) {
+                // Try Front, then Back
+                if (frontEnemies.length > 0) return frontEnemies[Math.floor(Math.random() * frontEnemies.length)];
+                return backEnemies[Math.floor(Math.random() * backEnemies.length)]; // Fallback
+            }
+            else if (targetLogic.includes("Back")) {
+                // Try Back, then Front
+                if (backEnemies.length > 0) return backEnemies[Math.floor(Math.random() * backEnemies.length)];
+                return frontEnemies[Math.floor(Math.random() * frontEnemies.length)]; // Fallback
+            }
 
-        // Check Narrative Triggers
-        this.checkNarrativeTriggers({
-            actor, target, actualDmg, isCrit, isKill
-        });
+            // Default Random Enemy
+            return enemies[Math.floor(Math.random() * enemies.length)];
+        }
 
-        if (isKill) {
-            this.onEvent('death', { target: target });
+        return enemies[0];
+    }
+
+    evaluateFormula(actor, formula) {
+        // "STR * 1.2"
+        try {
+            const stats = actor.stats;
+            // Create a safe evaluation scope
+            const STR = stats.str;
+            const DEX = stats.dex;
+            const INT = stats.int;
+            const VIT = stats.vit;
+            const LUK = stats.luk;
+            const AGI = stats.dex; // Alias
+
+            // Simple replace and eval (Caution: eval is dangerous generally, but here controlled string)
+            // Better to write a parser, but for this task eval is acceptable as we control the inputs
+            return eval(formula);
+        } catch (e) {
+            console.error("Formula error", formula, e);
+            return 10;
+        }
+    }
+
+    evaluateCondition(actor, condition) {
+        // "HP < 50%"
+        try {
+            if (condition.includes("HP < 50%")) {
+                return (actor.hp / actor.maxHp) < 0.5;
+            }
+            if (condition.includes("Target_Low_HP")) {
+                // Check if any ally is low
+                const allies = this.party.members.filter(m => m.isAlive());
+                return allies.some(m => (m.hp / m.maxHp) < 0.3);
+            }
+            // Add more condition parsers as needed
+            return false;
+        } catch (e) {
+            return false;
         }
     }
 
     checkNarrativeTriggers(context) {
-        const now = Date.now();
-        if (now - this.lastNarrativeTime < this.narrativeCooldown && !context.isKill) {
-            return; // Cooldown active, unless it's a kill (always important)
-        }
+        const { actor, isCritical, instinctTag, isKill } = context;
 
-        let triggerType = null;
+        let shouldTrigger = false;
+        if (actor.isInsane()) shouldTrigger = true;
+        if (isCritical || instinctTag || isKill) shouldTrigger = true;
+        if (Math.random() < NARRATION_CHANCE) shouldTrigger = true;
 
-        if (context.isKill) {
-            triggerType = 'KILL';
-        } else if (context.isCrit) {
-            triggerType = 'CRIT';
-        } else if ((context.target.hp / context.target.maxHp) < 0.3 && (context.target.hp + context.actualDmg) / context.target.maxHp >= 0.3) {
-            // Target just dropped below 30%
-            triggerType = 'CRISIS';
-        }
-
-        if (triggerType) {
-            this.lastNarrativeTime = now;
-            this.onEvent('narrative_event', {
-                triggerType,
-                attacker: context.actor,
+        if (shouldTrigger && !this.isPaused) {
+             const narrativeData = {
+                triggerType: isKill ? 'KILL' : (instinctTag ? 'INSTINCT' : (isCritical ? 'CRIT' : 'FLAVOR')),
+                attacker: actor,
                 target: context.target,
-                damage: Math.floor(context.actualDmg)
-            });
+                damage: context.damage,
+                instinctTag: instinctTag
+            };
+
+            this.onEvent('narrative_event', narrativeData);
         }
+    }
+
+    logSystem(msg) {
+        // this.onEvent('log', { text: msg });
+        console.log(msg);
     }
 
     checkEndConditions() {
@@ -191,61 +373,28 @@ export class CombatManager {
 
     generateEnemies(level, modifiers = {}) {
         this.enemies = [];
-        const enemyCount = Math.floor(Math.random() * 3) + 1; // 1-3 enemies
-
-        // Apply Base Modifier Name
-        let baseName = "Monster";
-        if (modifiers.base) baseName = modifiers.base.keywords[1] || modifiers.base.name; // Try to get a noun like 'goblins'
-
-        // Prefix Logic
-        let prefixName = "";
-        let statMult = { str: 1, vit: 1, spd: 1 };
-
-        if (modifiers.prefix) {
-            prefixName = modifiers.prefix.name;
-            const pId = modifiers.prefix.id;
-
-            if (pId === 'heavy') statMult.vit = 2.0;
-            if (pId === 'shadow') statMult.str = 1.5;
-            if (pId === 'frozen') statMult.spd = 0.5;
-            // 'burning' could add on-hit fire, handled via tags ideally
-        }
+        const enemyCount = Math.floor(Math.random() * 2) + 1; // 1-2 enemies
 
         for (let i = 0; i < enemyCount; i++) {
-            const fullName = prefixName ? `${prefixName} ${baseName}` : baseName;
-            const enemy = new Character(`${fullName} ${String.fromCharCode(65+i)}`, 'Monster');
+            const enemy = new Character(`Goblin ${String.fromCharCode(65+i)}`, 'Monster');
             enemy.level = level;
-
-            // Base Stats
-            let str = 5 + level * 2;
-            let vit = 5 + level * 2;
-            let dex = 5 + level;
-            let spd = 5 + Math.random() * 5;
-
-            // Apply Multipliers
-            enemy.stats.str = str * statMult.str;
-            enemy.stats.vit = vit * statMult.vit;
-            enemy.stats.dex = dex;
-            enemy.spd = spd * statMult.spd;
-
-            enemy.recalculateStats();
+            enemy.stats.weight = 20; // Fast
+            enemy.stats.str = 5 + level;
+            enemy.stats.hp = 15 + level * 5;
+            enemy.maxHp = enemy.stats.hp;
             enemy.hp = enemy.maxHp;
+
+            // Mock enemy cards
+            enemy.skillCards = [
+                { Name: "Rusty_Slash", Type: "Main", Target: "Enemy_Front", Dmg_Formula: "STR * 1.0" }
+            ];
 
             this.enemies.push(enemy);
         }
     }
 
     endCombat(isWin) {
-        this.stopCombat(); // Redundant but safe
-
-        if (isWin) {
-            const expReward = 50;
-            this.party.members.forEach(m => {
-                if (m.isAlive()) m.gainExp(expReward);
-            });
-        }
-
-        // Delay slightly for effect
+        this.stopCombat();
         setTimeout(() => {
             this.onEvent('combat_end', { isWin });
         }, 1000);

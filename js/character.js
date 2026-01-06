@@ -27,7 +27,8 @@ export class Character {
             dex: 10, // Dexterity: Hit rate, Evasion, Turn speed
             int: 10, // Intelligence: Magic damage, MP
             vit: 10, // Vitality: HP, Defense
-            luk: 10  // Luck: Crit rate, Drop rate
+            luk: 10, // Luck: Crit rate, Drop rate
+            weight: 50 // New: Determines Initiative (Lower is faster)
         };
 
         // Derived Stats (Calculated from Base Stats)
@@ -39,6 +40,9 @@ export class Character {
         this.atk = 0;
         this.def = 0;
         this.spd = 0;
+
+        // Combat positioning
+        this.zone = "Front"; // 'Front' or 'Back'
 
         // 5. Combat Status (Extended)
         this.combatStatus = {
@@ -52,6 +56,10 @@ export class Character {
             armor: null,
             accessory: null
         };
+
+        // New: Skill Cards & Instinct
+        this.skillCards = [];
+        this.instinct = null; // { Name, Trigger, Effect, Desc }
 
         this.applyClassModifiers();
         this.recalculateStats();
@@ -102,13 +110,66 @@ export class Character {
         if (data.baseArchetype) this.identity.baseArchetype = data.baseArchetype;
     }
 
+    // --- Combat System Methods (New) ---
+    getInitiative() {
+        // Lower weight = Higher Initiative
+        // Add random variance (1-20)
+        return (100 - this.stats.weight) + (Math.floor(Math.random() * 20) + 1);
+    }
+
+    isInsane() {
+        return this.hilbertSpace.sanity < 20;
+    }
+
+    // Load from Preset Data (Helper)
+    loadPreset(data) {
+        this.name = data.Name || this.name;
+        this.id = data.ID || this.id;
+        this.jobClass = data.Class || this.jobClass;
+        this.zone = data.Zone || "Front";
+
+        // Map Stats (Capitalized in JSON to lowercase)
+        if (data.Stats) {
+            this.stats.str = data.Stats.STR || this.stats.str;
+            this.stats.dex = data.Stats.DEX || this.stats.dex;
+            this.stats.int = data.Stats.INT || this.stats.int;
+            this.stats.vit = data.Stats.VIT || this.stats.vit;
+            this.stats.luk = data.Stats.LUK || this.stats.luk;
+            this.stats.weight = data.Stats.Weight || this.stats.weight;
+
+            this.maxHp = data.Stats.MaxHP || this.maxHp;
+            this.hp = data.Stats.HP || this.hp;
+            this.hilbertSpace.libidoLevel = data.Stats.Libido || 0;
+            this.hilbertSpace.sanity = data.Stats.Sanity || 100;
+        }
+
+        if (data.Instinct) this.instinct = { ...data.Instinct };
+        if (data.Skill_Cards) this.skillCards = JSON.parse(JSON.stringify(data.Skill_Cards));
+        if (data.Visual_Tags) this.identity.visualTags.custom = data.Visual_Tags;
+
+        if (data.MBTI) this.setMBTI(data.MBTI);
+
+        this.recalculateStats(); // Recalc derived stats (ATK, DEF etc)
+
+        // Fix for Fixed HP presets: Overwrite maxHp/hp if they were set in Stats
+        // recalculateStats uses Formula (VIT * 10), but preset data has explicit balance.
+        if (data.Stats && data.Stats.MaxHP) {
+            this.maxHp = data.Stats.MaxHP;
+        }
+        if (data.Stats && data.Stats.HP) {
+             this.hp = data.Stats.HP;
+        } else {
+             this.hp = this.maxHp;
+        }
+    }
+
     // --- MBTI System Methods ---
     setMBTI(stats) {
         // Support both old format (E, S, T, J keys) and new format (EI_Val etc)
-        if (stats.E !== undefined) this.mbtiDynamic.EI_Val = (stats.E / 2) + 50;
-        if (stats.S !== undefined) this.mbtiDynamic.SN_Val = (stats.S / 2) + 50;
-        if (stats.T !== undefined) this.mbtiDynamic.TF_Val = (stats.T / 2) + 50;
-        if (stats.J !== undefined) this.mbtiDynamic.JP_Val = (stats.J / 2) + 50;
+        if (stats.E !== undefined) this.mbtiDynamic.EI_Val = stats.E; // Now 0-100 direct
+        if (stats.S !== undefined) this.mbtiDynamic.SN_Val = stats.S;
+        if (stats.T !== undefined) this.mbtiDynamic.TF_Val = stats.T;
+        if (stats.J !== undefined) this.mbtiDynamic.JP_Val = stats.J;
 
         if (stats.EI_Val !== undefined) this.mbtiDynamic.EI_Val = stats.EI_Val;
         if (stats.SN_Val !== undefined) this.mbtiDynamic.SN_Val = stats.SN_Val;
@@ -410,7 +471,10 @@ export class Character {
             mbtiDynamic: { ...this.mbtiDynamic },
             hilbertSpace: JSON.parse(JSON.stringify(this.hilbertSpace)),
             aestheticState: { ...this.aestheticState },
-            combatStatus: { ...this.combatStatus }
+            combatStatus: { ...this.combatStatus },
+            instinct: this.instinct,
+            skillCards: this.skillCards,
+            zone: this.zone
         };
     }
 
@@ -433,6 +497,11 @@ export class Character {
         if (data.hilbertSpace) char.hilbertSpace = data.hilbertSpace;
         if (data.aestheticState) char.aestheticState = { ...data.aestheticState };
         if (data.combatStatus) char.combatStatus = { ...data.combatStatus };
+
+        // New Fields
+        if (data.instinct) char.instinct = data.instinct;
+        if (data.skillCards) char.skillCards = data.skillCards;
+        if (data.zone) char.zone = data.zone;
 
         char.updateMBTIType();
         char.recalculateStats();
@@ -476,6 +545,7 @@ export class Character {
     }
 
     recalculateStats() {
+        // Base stats from 'stats' object
         this.maxHp = this.stats.vit * 10 + this.level * 20;
         this.maxMp = this.stats.int * 5 + this.level * 10;
         this.atk = this.stats.str * 2; // Simplified
