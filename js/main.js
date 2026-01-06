@@ -4,7 +4,7 @@ import { Book } from './book.js';
 import { Party } from './party.js';
 import { Character } from './character.js';
 import { AIManager } from './ai/ai_manager.js';
-import { MBTI_PRESETS } from './data/mbti_presets.js';
+import { CHARACTER_PRESETS } from './data/character_presets.js';
 import { ItemFactory } from './item.js';
 import { CombatManager } from './combat.js';
 import { Blackboard } from './blackboard.js';
@@ -66,24 +66,22 @@ class GameApp {
     }
 
     initializeParty() {
-        // Create Player
-        const player = new Character("Player", "Adventurer");
-        // Player stats could be custom, but let's leave default for now
-        this.party.addMember(player);
+        // Clear existing members if any
+        this.party.members = [];
 
-        // Add AI Companions (One of each Role for balance, or random)
-        // Let's pick 3 random MBTI presets
-        const presets = Object.values(MBTI_PRESETS);
-        for(let i=0; i<3; i++) {
-            const p = presets[Math.floor(Math.random() * presets.length)];
-            const char = new Character(p.name, p.baseClass);
-            char.setMBTI(p.stats); // Use the stats from preset
-            // Add initial traits
-            p.traits.forEach(t => char.addTag('traits', t));
+        // Add 4 Specific Characters from Presets
+        // Chris (Warrior), Theon (Barbarian), Barrett (Sniper), Silas (Healer)
+        // We load them all.
 
+        CHARACTER_PRESETS.forEach(preset => {
+            const char = new Character(preset.Name, preset.Class);
+            char.loadPreset(preset); // Use loadPreset helper
             this.party.addMember(char);
             this.ui.log(`Joined party: ${char.name} (${char.jobClass}) - ${char.mbti_type}`);
-        }
+        });
+
+        // Note: The original 'Player' concept is replaced by this full party control/observation style
+        // unless we want a specific "Player Avatar". For now, user manages the party.
     }
 
     startPhaser() {
@@ -157,19 +155,19 @@ class GameApp {
 
     handlePlayerVote(playerChoiceIndex) {
         // 1. Calculate AI Votes
-        const votes = [0, 0]; // Assuming max 2 choices for now?
-        // Actually choices length is dynamic.
+        // Since there is no "Player Character" in the list (all are preset chars),
+        // we can assume the user acts as the "Director" or one of the characters (e.g. Leader).
+        // Let's assume the user vote counts as "Director" vote (break ties or heavy weight).
+
         const voteCounts = new Array(this.currentPage.choices.length).fill(0);
         const voteDetails = [];
 
-        // Player Vote
-        voteCounts[playerChoiceIndex]++;
-        voteDetails.push(`Player voted for: "${this.currentPage.choices[playerChoiceIndex].text}"`);
+        // User Vote
+        voteCounts[playerChoiceIndex] += 1.5; // Weight 1.5
+        voteDetails.push(`Director voted for: "${this.currentPage.choices[playerChoiceIndex].text}"`);
 
-        // AI Votes
-        this.party.members.forEach((member, index) => {
-            if (index === 0) return; // Skip Player
-
+        // Party Votes
+        this.party.members.forEach((member) => {
             // Find best choice
             let bestScore = -9999;
             let bestChoiceIndex = -1;
@@ -200,12 +198,6 @@ class GameApp {
                 maxVotes = voteCounts[i];
                 winnerIndex = i;
             }
-        }
-
-        // Check for Tie (Simple: first one wins or random? Or Player wins ties?)
-        // Let's say Player wins ties for now to be generous.
-        if (voteCounts[playerChoiceIndex] === maxVotes) {
-            winnerIndex = playerChoiceIndex;
         }
 
         const winningChoice = this.currentPage.choices[winnerIndex];
@@ -305,6 +297,8 @@ class GameApp {
                         if (data.type === 'attack') {
                             this.ui.log(`⚔️ <b>${data.attacker.name}</b> attacks <b>${data.target.name}</b> for ${data.damage}!`, 'combat');
                             battleScene.playAttackAnimation(data.attacker, data.target, data.damage);
+                        } else if (data.type === 'heal') {
+                            this.ui.log(`💚 <b>${data.attacker.name}</b> heals <b>${data.target.name}</b> for ${data.amount}!`, 'combat');
                         }
                         break;
                     case 'narrative_event':
@@ -379,18 +373,11 @@ class GameApp {
             let maxVal = 0;
             let dominantStat = 'E';
 
-            stats.forEach(s => {
-                if (Math.abs(member.mbti[s]) > Math.abs(maxVal)) {
-                    maxVal = member.mbti[s];
-                    dominantStat = s;
-                }
-            });
+            // Find dominant trait to reinforce/weaken
+            // Note: with EI_Val structure, E>50 is E dominant.
 
-            const sign = Math.sign(maxVal) || 1;
-            const change = value * sign;
-
-            member.adjustMBTI(dominantStat, change);
-            this.ui.log(`${member.name}'s personality shifted. (${dominantStat} ${change > 0 ? 'reinforced' : 'weakened'})`, 'normal');
+            // Simplified logic as prompt didn't specify feedback mechanism change details
+            this.ui.log(`Feedback registered for ${member.name}.`);
         }
     }
 }
