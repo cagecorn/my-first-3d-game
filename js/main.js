@@ -24,7 +24,8 @@ class GameApp {
     constructor() {
         this.ui = new UIManager();
         this.phaserGame = null;
-        this.apiKey = localStorage.getItem('google_api_key');
+        this.phaserGame = null;
+        this.apiKey = localStorage.getItem('llm_api_key');
 
         // Game Logic
         this.blackboard = new Blackboard();
@@ -55,30 +56,36 @@ class GameApp {
         this.ui.onApprove = (charName) => this.handleFeedback(charName, 2);
         this.ui.onDisapprove = (charName) => this.handleFeedback(charName, -2);
 
-        // Check for existing API Key
+        // Check for existing API Key or allow auto-pass for LM Studio (if preferred)
+        // If we want it to always show setup first time, keep as is.
         if (this.apiKey) {
             this.aiManager.setApiKey(this.apiKey);
-            this.ui.hideSetup();
-            this.initializeParty();
-            this.ui.log("Grimoire connected. Welcome back.");
-            this.startPhaser();
+            this.startGameSequence();
         } else {
             this.ui.showSetup();
         }
     }
 
+    async startGameSequence() {
+        try {
+            this.ui.hideSetup();
+            this.initializeParty();
+            this.ui.log("Grimoire connected. Welcome back.");
+            this.startPhaser();
+
+            // Initial Narrative
+            await this.handleTurnPage();
+        } catch (e) {
+            console.error("Failed to start game:", e);
+            this.ui.log("The Grimoire is sealed. (Initial load error)", 'system');
+        }
+    }
+
     handleStartGame(key) {
-        this.apiKey = key;
-        localStorage.setItem('google_api_key', key);
-        this.aiManager.setApiKey(key);
-        this.ui.hideSetup();
-
-        this.initializeParty();
-        this.ui.log("Key accepted. The Grimoire opens...");
-        this.startPhaser();
-
-        // Generate first page
-        this.handleTurnPage();
+        this.apiKey = key || 'not-needed';
+        localStorage.setItem('llm_api_key', this.apiKey);
+        this.aiManager.setApiKey(this.apiKey);
+        this.startGameSequence();
     }
 
     initializeParty() {
@@ -131,17 +138,17 @@ class GameApp {
         // Check for Forced Events (Interrupts)
         const forcedEvent = forcedType || this.checkForceEvents();
         if (forcedEvent) {
-             if (forcedEvent === GAME_STATE.LIBIDO_EVENT) {
-                 this.state = GAME_STATE.LIBIDO_EVENT;
-                 await this.triggerLibidoScene();
-                 return;
-             }
-             // [NEW] Messiah Event Logic (Stub)
-             if (forcedEvent === GAME_STATE.MESSIAH_EVENT) {
-                 this.state = GAME_STATE.MESSIAH_EVENT;
-                 await this.triggerMessiahScene(); // Stub function
-                 return;
-             }
+            if (forcedEvent === GAME_STATE.LIBIDO_EVENT) {
+                this.state = GAME_STATE.LIBIDO_EVENT;
+                await this.triggerLibidoScene();
+                return;
+            }
+            // [NEW] Messiah Event Logic (Stub)
+            if (forcedEvent === GAME_STATE.MESSIAH_EVENT) {
+                this.state = GAME_STATE.MESSIAH_EVENT;
+                await this.triggerMessiahScene(); // Stub function
+                return;
+            }
         }
 
         // Standard Page Generation
@@ -171,8 +178,8 @@ class GameApp {
                 // Open Chat for Rest
                 this.openChat('Rest');
                 await this.aiManager.geminiNarrate("모닥불 타는 소리만 들립니다. 누군가 당신의 말을 기다리는 눈치군요.")
-                     .then(text => { if(text) this.ui.log(text); }) // Simple log or specialized logic
-                     .catch(() => {});
+                    .then(text => { if (text) this.ui.log(text); }) // Simple log or specialized logic
+                    .catch(() => { });
 
             } else {
                 this.state = GAME_STATE.EXPLORE;
@@ -181,7 +188,7 @@ class GameApp {
 
             // Render Choices
             if (this.currentPage.choices && this.currentPage.choices.length > 0) {
-                 this.renderVotingUI();
+                this.renderVotingUI();
             }
 
         } catch (e) {
@@ -269,7 +276,7 @@ class GameApp {
         // Determine Winner
         let maxVotes = -1;
         let winnerIndex = -1;
-        for(let i=0; i<voteCounts.length; i++) {
+        for (let i = 0; i < voteCounts.length; i++) {
             if (voteCounts[i] > maxVotes) {
                 maxVotes = voteCounts[i];
                 winnerIndex = i;
@@ -362,8 +369,8 @@ class GameApp {
             this.awardLoot();
             this.renderNextPageButton();
         } else {
-             // Default fallthrough
-             this.enterNextPage();
+            // Default fallthrough
+            this.enterNextPage();
         }
     }
 
@@ -395,7 +402,7 @@ class GameApp {
         try {
             const intro = await this.aiManager.generateEventNarrative(introTags);
             this.ui.log(`<div class="p-2 my-2 text-gray-400 italic text-sm">${intro}</div>`, 'normal');
-        } catch(e) {}
+        } catch (e) { }
 
         this.ui.log("Combat Started!", 'system');
 
@@ -406,13 +413,13 @@ class GameApp {
 
         const battleScene = this.phaserGame.scene.getScene('BattleScene');
         if (!battleScene) {
-                this.ui.log("Error: Battle Scene not found.");
-                return;
+            this.ui.log("Error: Battle Scene not found.");
+            return;
         }
 
         // Create Combat Manager
         this.combatManager = new CombatManager(this.party, async (type, data) => {
-            switch(type) {
+            switch (type) {
                 case 'combat_start':
                     battleScene.setupCombat(data.party, data.enemies);
 
@@ -854,7 +861,7 @@ class GameApp {
     }
 
     checkEnter(e) {
-        if(e.key === 'Enter') this.sendChat();
+        if (e.key === 'Enter') this.sendChat();
     }
 
     isLibidoPage() {

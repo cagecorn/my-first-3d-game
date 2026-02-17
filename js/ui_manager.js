@@ -19,11 +19,8 @@ export class UIManager {
     bindEvents() {
         this.btnStart.addEventListener('click', () => {
             const key = this.apiKeyInput.value.trim();
-            if (key) {
-                if (this.onStartGame) this.onStartGame(key);
-            } else {
-                alert("Please enter a valid API Key.");
-            }
+            // Allow empty key for LM Studio
+            if (this.onStartGame) this.onStartGame(key);
         });
 
         this.btnTurnPage.addEventListener('click', () => {
@@ -75,32 +72,32 @@ export class UIManager {
 
         // If character provided (AI dialogue), add Approve/Disapprove buttons
         if (character && type === 'normal') { // Assuming normal log is used for dialogue
-             const controls = document.createElement('div');
-             controls.className = "flex gap-2 mt-1";
+            const controls = document.createElement('div');
+            controls.className = "flex gap-2 mt-1";
 
-             const btnApprove = document.createElement('button');
-             btnApprove.innerText = "👍";
-             btnApprove.className = "text-xs px-2 py-1 bg-green-100 hover:bg-green-200 rounded border border-green-300";
-             btnApprove.onclick = () => {
-                 if (this.onApprove) this.onApprove(character);
-                 btnApprove.disabled = true;
-                 btnDisapprove.disabled = true;
-                 p.classList.add("bg-green-50");
-             };
+            const btnApprove = document.createElement('button');
+            btnApprove.innerText = "👍";
+            btnApprove.className = "text-xs px-2 py-1 bg-green-100 hover:bg-green-200 rounded border border-green-300";
+            btnApprove.onclick = () => {
+                if (this.onApprove) this.onApprove(character);
+                btnApprove.disabled = true;
+                btnDisapprove.disabled = true;
+                p.classList.add("bg-green-50");
+            };
 
-             const btnDisapprove = document.createElement('button');
-             btnDisapprove.innerText = "👎";
-             btnDisapprove.className = "text-xs px-2 py-1 bg-red-100 hover:bg-red-200 rounded border border-red-300";
-             btnDisapprove.onclick = () => {
-                 if (this.onDisapprove) this.onDisapprove(character);
-                 btnApprove.disabled = true;
-                 btnDisapprove.disabled = true;
-                 p.classList.add("bg-red-50");
-             };
+            const btnDisapprove = document.createElement('button');
+            btnDisapprove.innerText = "👎";
+            btnDisapprove.className = "text-xs px-2 py-1 bg-red-100 hover:bg-red-200 rounded border border-red-300";
+            btnDisapprove.onclick = () => {
+                if (this.onDisapprove) this.onDisapprove(character);
+                btnApprove.disabled = true;
+                btnDisapprove.disabled = true;
+                p.classList.add("bg-red-50");
+            };
 
-             controls.appendChild(btnApprove);
-             controls.appendChild(btnDisapprove);
-             p.appendChild(controls);
+            controls.appendChild(btnApprove);
+            controls.appendChild(btnDisapprove);
+            p.appendChild(controls);
         }
 
         this.logElement.appendChild(p);

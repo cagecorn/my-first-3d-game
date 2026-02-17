@@ -1,16 +1,28 @@
-import { PERSONAS } from './config/personas.js';
 import { WORLD_LORE, GAME_RULES } from './config/world.js';
 import { SYSTEM_PROMPT } from './config/system.js';
+import { LMStudioProvider, GeminiProvider } from './llm_provider.js';
 
 export class AIManager {
     constructor(blackboard = null) {
         this.apiKey = null;
-        this.model = "gemini-2.5-flash"; // Updated to user memory preference
+        this.model = "my_final_ai";
         this.blackboard = blackboard;
+        this.provider = new LMStudioProvider(null, this.model); // Default to LM Studio
     }
 
     setApiKey(key) {
         this.apiKey = key ? key.trim() : null;
+        if (this.provider) {
+            this.provider.apiKey = this.apiKey;
+        }
+    }
+
+    setProvider(type) {
+        if (type === 'gemini') {
+            this.provider = new GeminiProvider(this.apiKey, "gemini-2.0-flash");
+        } else {
+            this.provider = new LMStudioProvider(this.apiKey, this.model);
+        }
     }
 
     // [NEW] Self-Erosion / Messiah System Helpers
@@ -189,10 +201,10 @@ Constraint: Keep it very brief (1-2 sentences).
     }
 
     async _callGemini(userPrompt) {
-         // [NEW] Messiah Injection
-         const messiahInjection = this.getMessiahPromptInjection();
+        // [NEW] Messiah Injection
+        const messiahInjection = this.getMessiahPromptInjection();
 
-         const fullPrompt = `
+        const fullPrompt = `
 ${SYSTEM_PROMPT}
 
 ${messiahInjection}
@@ -201,34 +213,16 @@ ${userPrompt}
         `;
 
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: fullPrompt
-                        }]
-                    }]
-                })
-            });
-
-            if (!response.ok) {
-                console.error("AI API Error:", response.status, response.statusText);
-                console.error("Endpoint:", `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`);
-                return "The mist obscures your vision... (AI Error)";
+            if (!this.provider) {
+                console.error("No LLM Provider set.");
+                return "The mist obscures your vision... (No AI Provider)";
             }
 
-            const data = await response.json();
-            const textResult = data.candidates[0].content.parts[0].text;
-            return textResult.trim();
+            return await this.provider.generateContent(fullPrompt);
 
         } catch (e) {
             console.error("AI Generation failed:", e);
-            return "The mist obscures your vision... (Network Error)";
+            return "The mist obscures your vision... (AI Error)";
         }
     }
 
@@ -240,8 +234,8 @@ ${userPrompt}
         const resultText = await this._callGemini(promptContext);
 
         if (this.blackboard && this.blackboard.getLogManager) {
-             // Extract context data again for logging (or refactor _buildContext to return it)
-             this.blackboard.getLogManager().addLog({
+            // Extract context data again for logging (or refactor _buildContext to return it)
+            this.blackboard.getLogManager().addLog({
                 Trigger_Event: "Party_Reaction",
                 Active_Variables: {
                     Context_Type: contextData.type || "Unknown",
@@ -254,10 +248,10 @@ ${userPrompt}
         }
 
         try {
-             // Clean up Markdown code blocks if present
+            // Clean up Markdown code blocks if present
             const jsonStr = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(jsonStr);
-        } catch(e) {
+        } catch (e) {
             console.error("Failed to parse party reaction JSON", e);
             return [];
         }
@@ -267,9 +261,9 @@ ${userPrompt}
         // Blackboard Context
         let blackboardContext = "";
         if (this.blackboard) {
-             const global = this.blackboard.getGlobalState();
-             const director = this.blackboard.getDirectorControl();
-             blackboardContext = `
+            const global = this.blackboard.getGlobalState();
+            const director = this.blackboard.getDirectorControl();
+            blackboardContext = `
 [World State]
 - Chapter: ${global.Chapter}
 - Tone: ${director.Current_Tone}
@@ -298,11 +292,11 @@ ${userPrompt}
         // Context Description
         let situationDesc = "";
         if (contextData.type === 'PAGE_ARRIVAL') {
-             situationDesc = `Current Situation [Exploration]:\nArrived at ${contextData.title}.\n${contextData.description}`;
+            situationDesc = `Current Situation [Exploration]:\nArrived at ${contextData.title}.\n${contextData.description}`;
         } else if (contextData.type === 'COMBAT_EVENT') {
-             situationDesc = `Current Situation [Combat]:\n${contextData.dmText}\n(Event: ${contextData.trigger} by ${contextData.actor})`;
+            situationDesc = `Current Situation [Combat]:\n${contextData.dmText}\n(Event: ${contextData.trigger} by ${contextData.actor})`;
         } else {
-             situationDesc = `Current Situation: ${JSON.stringify(contextData)}`;
+            situationDesc = `Current Situation: ${JSON.stringify(contextData)}`;
         }
 
         return `
